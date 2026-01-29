@@ -63,6 +63,18 @@ def status_back_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🏠 Back to menu", callback_data="nav:home")],
     ])
 
+def coin_choice_kb(cat_key: str, days: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="₿ Pay with BTC", callback_data=f"pay:btc:{cat_key}:{days}")],
+        [InlineKeyboardButton(text="Ł Pay with LTC", callback_data=f"pay:ltc:{cat_key}:{days}")],
+        [InlineKeyboardButton(text="Ξ Pay with ETH", callback_data=f"pay:eth:{cat_key}:{days}")],
+        [InlineKeyboardButton(text="💵 Pay with USDT (TRC20)", callback_data=f"pay:usdttrc20:{cat_key}:{days}")],
+        [
+            InlineKeyboardButton(text="🔙 Back", callback_data=f"cat:{cat_key}"),
+            InlineKeyboardButton(text="🏠 Home", callback_data="nav:home"),
+        ],
+    ])
+
 def category_menu_kb(cat_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔓 Access", callback_data=f"access:{cat_key}")],
@@ -181,13 +193,14 @@ async def plan_selected(c):
     _, cat_key, days_str = c.data.split(":")
     days = int(days_str)
 
-    # ostavi UI poruku (menu) kako je – može ostati edit ili ne
-    # ovdje ne diramo menu, samo šaljemo notice ispod
-    await send_notice(
-        c,
-        f"| 🔴REC | You have chosen {days} DAY ACCESS for {CATEGORIES[cat_key]['title']}.\n\n"
-        "🔗 tu ce biti cloud."
+    await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
+
+    msg = await c.message.answer(
+        f"✅ You selected **{days} days** for {CATEGORIES[cat_key]['title']}.\n\n"
+        "Choose crypto to pay:",
+        reply_markup=coin_choice_kb(cat_key, days)
     )
+    LAST_NOTICE[c.from_user.id] = msg.message_id
     await c.answer()
 
 @dp.callback_query(F.data.startswith("pl:"))
@@ -295,9 +308,53 @@ async def access_callback(c):
 async def buy_callback(c):
     cat_key = c.data.split(":", 1)[1]
     await c.message.edit_text(
-        f"💳 Purchase for {CATEGORIES[cat_key]['title']} coming soon.",
+        f"{CATEGORIES[cat_key]['title']}\n\n{CATEGORIES[cat_key]['desc']}\n\n✨ Choose plan:",
         reply_markup=kb_for_category(cat_key)
     )
+    await c.answer()
+
+
+@dp.callback_query(F.data.startswith("pay:"))
+async def pay_nowpayments(c):
+    # pay:btc:mail_combo:30
+    _, coin, cat_key, days_str = c.data.split(":")
+    days = int(days_str)
+
+    await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
+
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{BASE_URL}/pay/nowpayments/create",
+            params={
+                "user_id": c.from_user.id,
+                "days": days,
+                "pay_currency": coin,
+            },
+        ) as r:
+            if r.status != 200:
+                txt = await r.text()
+                msg = await c.message.answer(f"❌ Payment error:\n{txt}", reply_markup=status_back_kb())
+                LAST_NOTICE[c.from_user.id] = msg.message_id
+                await c.answer()
+                return
+
+            data = await r.json()
+
+    invoice_url = data.get("invoice_url")
+    if not invoice_url:
+        msg = await c.message.answer("❌ Could not create invoice. Try again.", reply_markup=status_back_kb())
+        LAST_NOTICE[c.from_user.id] = msg.message_id
+        await c.answer()
+        return
+
+    msg = await c.message.answer(
+        f"💳 Pay here:\n{invoice_url}\n\n"
+        f"Plan: {days} days\n"
+        "✅ Access will be activated automatically after confirmation.",
+        reply_markup=status_back_kb()
+    )
+    LAST_NOTICE[c.from_user.id] = msg.message_id
     await c.answer()
 
 async def main():

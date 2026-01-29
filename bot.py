@@ -73,17 +73,29 @@ async def send_notice(c, text: str):
     msg = await c.message.answer(text)
     LAST_NOTICE[c.from_user.id] = msg.message_id
 
-async def safe_edit_or_replace(c, text: str, kb: InlineKeyboardMarkup):
+async def safe_edit_or_replace(
+    c,
+    text: str,
+    kb: InlineKeyboardMarkup,
+    parse_mode: str = "HTML",
+):
     """
     Pokuša editati trenutnu poruku.
     Ako ne može -> pošalje novu poruku i obriše staru, da se ne stacka.
     """
     try:
-        await c.message.edit_text(text, reply_markup=kb)
+        await c.message.edit_text(
+            text,
+            reply_markup=kb,
+            parse_mode=parse_mode,
+        )
         return c.message.message_id
     except TelegramBadRequest:
-        msg = await c.message.answer(text, reply_markup=kb)
-        # obriši staru poruku koja je trebala biti editana
+        msg = await c.message.answer(
+            text,
+            reply_markup=kb,
+            parse_mode=parse_mode,
+        )
         try:
             await c.message.delete()
         except Exception:
@@ -508,7 +520,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📦 Subscriptions", callback_data="admin:subs:1")],
         [InlineKeyboardButton(text="📈 Priv Lines (last buys)", callback_data="admin:pl:1")],
-        [InlineKeyboardButton(text="🏠 Home", callback_data="nav:home")],
+        [InlineKeyboardButton(text="🏠 Leave admin panel", callback_data="nav:home")],
     ])
 
 def admin_pager_kb(prefix: str, page: int, has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
@@ -541,7 +553,7 @@ def sub_type_label(k: str) -> str:
 async def admin_cmd(m: Message):
     if not is_admin(m.from_user.id):
         return await m.answer("⛔️ Nemaš pristup.")
-    await m.answer("🛠️ Admin tools", reply_markup=admin_menu_kb())
+    await m.answer("🛠️ <b>ItsPeak Admin tools</b> - managing everything - buys, subscriptions, ids.", reply_markup=admin_menu_kb())
 
 @dp.callback_query(F.data == "admin:menu")
 async def admin_menu_cb(c):

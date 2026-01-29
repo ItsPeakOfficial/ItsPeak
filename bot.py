@@ -490,7 +490,8 @@ def is_admin(user_id: int) -> bool:
 
 def admin_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📦 Subscriptions", callback_data="admin:subs:1")],
+        [InlineKeyboardButton(text="🟢 Active subscriptions", callback_data="admin:subs:1")],
+        [InlineKeyboardButton(text="🔴 Expired / revoked", callback_data="admin:expired:1")],
         [InlineKeyboardButton(text="📈 Priv Lines (last buys)", callback_data="admin:pl:1")],
         [InlineKeyboardButton(text="🏠 Leave admin panel", callback_data="nav:home")],
     ])
@@ -650,8 +651,8 @@ async def format_user_identity(user_id: int) -> str:
     except Exception:
         return str(user_id)
 
-@dp.callback_query(F.data.startswith("admin:subs:"))
-async def admin_subs_list(c):
+@dp.callback_query(F.data.startswith("admin:expired:"))
+async def admin_expired_list(c):
     if not is_admin(c.from_user.id):
         return await c.answer("No access", show_alert=True)
 
@@ -659,33 +660,34 @@ async def admin_subs_list(c):
     page = max(1, page)
 
     offset = (page - 1) * ADMIN_PAGE_SIZE
-    rows, total = await db.get_subscriptions_page(limit=ADMIN_PAGE_SIZE, offset=offset)
+    rows, total = await db.get_expired_subscriptions_page(
+        limit=ADMIN_PAGE_SIZE,
+        offset=offset,
+    )
 
     pages = (total + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE if total else 1
     has_prev = page > 1
     has_next = page < pages
 
-    now = int(time.time())
+    text_lines = [f"🔴 <b>Expired / revoked subscriptions</b> (page {page}/{pages})\n"]
 
-    text_lines = [f"📦 <b>Subscriptions</b> (page {page}/{pages})\n"]
     if not rows:
         text_lines.append("— nema zapisa —")
     else:
         for r in rows:
             uid = r["user_id"]
             exp = r["expires_at"]
-            st = sub_type_label(r.get("sub_type", ""))
+            st = sub_type_label(r.get("sub_type", "")) or "—"
 
             user_label = await format_user_identity(uid)
-            badge = "🟢 ACTIVE" if exp > now else "🔴 EXPIRED"
 
             text_lines.append(
-                f"{badge} <b>{user_label}</b> — {st}\n"
-                f"⏳ expires: <code>{fmt_ts(exp)}</code>"
+                f"🔴 <b>{user_label}</b> — {st}\n"
+                f"⏳ expired: <code>{fmt_ts(exp)}</code>"
             )
 
     text = "\n\n".join(text_lines)
-    kb = admin_pager_kb("admin:subs", page, has_prev, has_next)
+    kb = admin_pager_kb("admin:expired", page, has_prev, has_next)
 
     await safe_edit_or_replace(c, text, kb)
     await c.answer()

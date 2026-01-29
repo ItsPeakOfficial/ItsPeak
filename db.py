@@ -221,34 +221,119 @@ async def cleanup_expired_tokens():
 # ---------- ADMIN QUERIES ----------
 async def get_subscriptions_page(limit: int = 10, offset: int = 0):
     """
-    Returns: (rows, total)
-    row: {"user_id": int, "expires_at": int, "sub_type": str}
+    ACTIVE subscriptions ONLY
     """
+    now = int(time.time())
+
     if DATABASE_URL:
         pool = await _pg()
         async with pool.acquire() as conn:
-            total = await conn.fetchval("SELECT COUNT(*) FROM subscriptions")
-            rows = await conn.fetch(
-                "SELECT user_id, expires_at, sub_type FROM subscriptions ORDER BY expires_at DESC LIMIT $1 OFFSET $2",
-                limit, offset
+            total = await conn.fetchval(
+                "SELECT COUNT(*) FROM subscriptions WHERE expires_at > $1",
+                now,
             )
-            out = [{"user_id": int(r["user_id"]), "expires_at": int(r["expires_at"]), "sub_type": r["sub_type"] or ""} for r in rows]
+            rows = await conn.fetch(
+                "SELECT user_id, expires_at, sub_type "
+                "FROM subscriptions "
+                "WHERE expires_at > $1 "
+                "ORDER BY expires_at ASC "
+                "LIMIT $2 OFFSET $3",
+                now, limit, offset,
+            )
+            out = [
+                {
+                    "user_id": int(r["user_id"]),
+                    "expires_at": int(r["expires_at"]),
+                    "sub_type": r["sub_type"] or "",
+                }
+                for r in rows
+            ]
             return out, int(total or 0)
     else:
         import aiosqlite
         async with aiosqlite.connect(SQLITE_PATH) as db:
-            cur = await db.execute("SELECT COUNT(*) FROM subscriptions")
-            total_row = await cur.fetchone()
-            total = int(total_row[0]) if total_row else 0
+            cur = await db.execute(
+                "SELECT COUNT(*) FROM subscriptions WHERE expires_at > ?",
+                (now,),
+            )
+            total = (await cur.fetchone())[0]
 
             cur = await db.execute(
-                "SELECT user_id, expires_at, sub_type FROM subscriptions ORDER BY expires_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
+                "SELECT user_id, expires_at, sub_type "
+                "FROM subscriptions "
+                "WHERE expires_at > ? "
+                "ORDER BY expires_at ASC "
+                "LIMIT ? OFFSET ?",
+                (now, limit, offset),
             )
             rows = await cur.fetchall()
-            out = [{"user_id": int(r[0]), "expires_at": int(r[1]), "sub_type": (r[2] or "")} for r in rows]
+            out = [
+                {
+                    "user_id": int(r[0]),
+                    "expires_at": int(r[1]),
+                    "sub_type": r[2] or "",
+                }
+                for r in rows
+            ]
             return out, total
 
+async def get_expired_subscriptions_page(limit: int = 10, offset: int = 0):
+    """
+    EXPIRED + UNGRANTED subscriptions
+    """
+    now = int(time.time())
+
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            total = await conn.fetchval(
+                "SELECT COUNT(*) FROM subscriptions WHERE expires_at <= $1",
+                now,
+            )
+            rows = await conn.fetch(
+                "SELECT user_id, expires_at, sub_type "
+                "FROM subscriptions "
+                "WHERE expires_at <= $1 "
+                "ORDER BY expires_at DESC "
+                "LIMIT $2 OFFSET $3",
+                now, limit, offset,
+            )
+            out = [
+                {
+                    "user_id": int(r["user_id"]),
+                    "expires_at": int(r["expires_at"]),
+                    "sub_type": r["sub_type"] or "",
+                }
+                for r in rows
+            ]
+            return out, int(total or 0)
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            cur = await db.execute(
+                "SELECT COUNT(*) FROM subscriptions WHERE expires_at <= ?",
+                (now,),
+            )
+            total = (await cur.fetchone())[0]
+
+            cur = await db.execute(
+                "SELECT user_id, expires_at, sub_type "
+                "FROM subscriptions "
+                "WHERE expires_at <= ? "
+                "ORDER BY expires_at DESC "
+                "LIMIT ? OFFSET ?",
+                (now, limit, offset),
+            )
+            rows = await cur.fetchall()
+            out = [
+                {
+                    "user_id": int(r[0]),
+                    "expires_at": int(r[1]),
+                    "sub_type": r[2] or "",
+                }
+                for r in rows
+            ]
+            return out, total
 
 async def insert_private_lines_purchase(user_id: int, package: str, lines_count: int, price_usd: int, created_at: int):
     if DATABASE_URL:

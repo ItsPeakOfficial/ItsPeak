@@ -227,10 +227,16 @@ def safe_cat_key_from_pl(code: str) -> str:
     # private lines callback nema cat_key pa ga fiksno vraćamo
     return "private_lines"
 
+def category_title(cat_key: str) -> str:
+    cat = CATEGORIES.get(cat_key)
+    return cat["title"] if cat else cat_key
+
 @dp.message(Command("start"))
 async def start(m: Message):
     await m.answer(
-        "👋 Welcome to ItsPeak shop!\n\n⚙️ Deploy: {DEPLOY_ID}\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose category:",
+        f"👋 Welcome to ItsPeak shop!\n\n⚙️ Deploy: {DEPLOY_ID}\n\n"
+        "📞 If you need any help, feel free to contact me at @ispodradara106\n\n"
+        "⬇️ Choose category:",
         reply_markup=main_menu_kb()
     )
 
@@ -265,8 +271,7 @@ async def plan_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text2 = (
-        f"| 🔴REC | You selected *{days} DAYS* for {CATEGORIES[cat_key]['title']}.\n\n"
-        "If you want to purchase with another coin, message @ispodradara106.\n\n"
+        f"|🔴REC | You selected **{days} days** for {category_title(cat_key)}.\n\n"
         "Choose crypto to pay:"
     )
     await send_screen(c, text2, coin_choice_kb(cat_key, days))
@@ -415,9 +420,12 @@ async def pay_nowpayments(c):
         await c.answer()
         return
 
+    cat_title = category_title(cat_key)
+
     msg = await c.message.answer(
         f"💳 Pay here:\n{invoice_url}\n\n"
-        f"Selected plan: {days} days access.\n\n"
+        f"📦 Category: {cat_title}\n"
+        f"⏱ Selected plan: {days} days\n\n"
         "✅ Access will be activated automatically after confirmation.",
         reply_markup=status_back_kb()
     )
@@ -470,7 +478,8 @@ async def pay_private_lines_nowpayments(c):
 
     msg = await c.message.answer(
         f"💳 Pay here:\n{invoice_url}\n\n"
-        f"Package: {info['title']} — ${info['price_usd']}\n"
+        f"📦 Category: {category_title('private_lines')}\n"
+        f"📦 Package: {info['title']} — ${info['price_usd']}\n\n"
         "✅ Delivery will be sent automatically after confirmation.",
         reply_markup=status_back_kb()
     )

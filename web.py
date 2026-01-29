@@ -4,7 +4,7 @@ import hmac
 import hashlib
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from dotenv import load_dotenv
 
 import db
@@ -88,11 +88,22 @@ async def create_nowpayments_invoice(user_id: int, days: int, pay_currency: str)
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post("https://api.nowpayments.io/v1/invoice", json=payload, headers=headers)
 
+    print("NOWPayments status:", r.status_code)
+    print("NOWPayments body:", r.text)
+
     if r.status_code not in (200, 201):
-        raise HTTPException(status_code=400, detail=r.text)
+        # vrati isti status kao NOWPayments + JSON ako postoji
+        try:
+            return JSONResponse(status_code=r.status_code, content=r.json())
+        except Exception:
+            return JSONResponse(status_code=r.status_code, content={"error": r.text})
 
     data = r.json()
-    return {"invoice_url": data["invoice_url"]}
+    invoice_url = data.get("invoice_url")
+    if not invoice_url:
+        return JSONResponse(status_code=502, content={"error": "Missing invoice_url", "raw": data})
+
+    return {"invoice_url": invoice_url}
 
 @app.post("/webhook/nowpayments")
 async def nowpayments_webhook(request: Request):

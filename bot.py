@@ -5,31 +5,36 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from dotenv import load_dotenv
+from aiogram.exceptions import TelegramBadRequest
+
 
 load_dotenv()
 
 CATEGORIES = {
     "mail_combo": {
-        "title": "📩 Mail Combo Cloud",
-        "desc": "🗓️ You get shared hotmail/gmail/mixed lines DAILY.",
+        "title": "📩 Cloud",
+        "desc": "🗓️ opis",
     },
     "private_lines": {
-        "title": "🔐 Full Private Lines",
-        "desc": "📃 You get 1:1 private untouched lines.",
+        "title": "🔐 Priv",
+        "desc": "📃 opius",
     },
     "url_cloud": {
-        "title": "🔗 URL Cloud",
-        "desc": "🎯 You get URL cloud for making combos, ready for SQLI testing.",
+        "title": "🔗 URL",
+        "desc": "🎯 opis",
     },
     "injectables": {
-        "title": "🧪 Injectables Cloud",
-        "desc": "💎 You get a private injectables ready for data dumping (names, numbers, email, passwords, etc.).",
+        "title": "🧪 Inekcijje",
+        "desc": "💎 opis",
     },
 }
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 LAST_NOTICE = {}  # user_id -> message_id
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
+BASE_URL = (BASE_URL or "").strip().rstrip("/")
+if BASE_URL and not BASE_URL.startswith(("http://", "https://")):
+    BASE_URL = "https://" + BASE_URL
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -52,10 +57,10 @@ async def send_notice(c, text: str):
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📩 Mail Combo Cloud 📩", callback_data="cat:mail_combo")],
-        [InlineKeyboardButton(text="🔐 Full Private Lines 🔐", callback_data="cat:private_lines")],
-        [InlineKeyboardButton(text="🔗 URL Cloud 🔗", callback_data="cat:url_cloud")],
-        [InlineKeyboardButton(text="🧪 Injectables Cloud 🧪", callback_data="cat:injectables")],
+        [InlineKeyboardButton(text="📩 Mejlovi Cloud 📩", callback_data="cat:mail_combo")],
+        [InlineKeyboardButton(text="🔐 FPV 🔐", callback_data="cat:private_lines")],
+        [InlineKeyboardButton(text="🔗 URL 🔗", callback_data="cat:url_cloud")],
+        [InlineKeyboardButton(text="🧪 Inekcije 🧪", callback_data="cat:injectables")],
     ])
 
 def status_back_kb() -> InlineKeyboardMarkup:
@@ -155,38 +160,41 @@ async def start(m: Message):
 @dp.callback_query(F.data.startswith("cat:"))
 async def open_category(c):
     cat_key = c.data.split(":", 1)[1]
-    await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
     cat = CATEGORIES.get(cat_key)
     if not cat:
-        await c.answer("Nepoznata kategorija.")
+        await c.answer("Unknown category.")
         return
 
+    await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
+
     text = f"{cat['title']}\n\n{cat['desc']}\n\n✨ Choose plan:"
+    kb = kb_for_category(cat_key)
 
-    if cat_key == "mail_combo":
-        await c.message.edit_text(text, reply_markup=mail_combo_plans_kb())
-    elif cat_key == "private_lines":
-        await c.message.edit_text(text, reply_markup=private_lines_plans_kb())
-    elif cat_key == "url_cloud":
-        await c.message.edit_text(text, reply_markup=url_cloud_plans_kb())
-    elif cat_key == "injectables":
-        await c.message.edit_text(text, reply_markup=injectables_cloud_plans_kb())
-    else:
-        await c.message.edit_text(text, reply_markup=category_menu_kb(cat_key))
-
+    try:
+        await c.message.edit_text(text, reply_markup=kb)
+    except TelegramBadRequest:
+        # ako poruka ne postoji / ne može se editati, pošalji novu
+        msg = await c.message.answer(text, reply_markup=kb)
+        LAST_NOTICE[c.from_user.id] = msg.message_id
 
     await c.answer()
+
 
 
 @dp.callback_query(F.data == "nav:home")
 async def nav_home(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
-    await c.message.edit_text(
-        "🏠 Main menu\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:",
-        reply_markup=main_menu_kb()
-    )
+    text = "🏠 Main menu\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
+    kb = main_menu_kb()
+
+    try:
+        await c.message.edit_text(text, reply_markup=kb)
+    except TelegramBadRequest:
+        await c.message.answer(text, reply_markup=kb)
+
     await c.answer()
+
 
 @dp.callback_query(F.data.startswith("plan:"))
 async def plan_selected(c):

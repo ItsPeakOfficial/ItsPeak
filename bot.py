@@ -94,6 +94,25 @@ async def send_screen(c, text: str, kb: InlineKeyboardMarkup):
     LAST_SCREEN[c.from_user.id] = msg.message_id
     return msg.message_id
 
+async def go_home_clean(c):
+    # obriši notice + screen (stare)
+    await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
+    await delete_last_screen(chat_id=c.message.chat.id, user_id=c.from_user.id)
+
+    # pošalji novi home screen
+    text = "🏠 Main menu\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
+    kb = main_menu_kb()
+    msg = await c.message.answer(text, reply_markup=kb)
+    LAST_SCREEN[c.from_user.id] = msg.message_id
+
+    # obriši poruku s koje je user kliknuo (invoice/status/grant itd.)
+    try:
+        await c.message.delete()
+    except Exception:
+        pass
+
+    await c.answer()
+
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📩 Mejlovi Cloud 📩", callback_data="cat:mail_combo")],
@@ -216,14 +235,7 @@ async def open_category(c):
 
 @dp.callback_query(F.data == "nav:home")
 async def nav_home(c):
-    await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
-
-    text = "🏠 Main menu\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
-    kb = main_menu_kb()
-
-    mid = await safe_edit_or_replace(c, text, kb)
-    LAST_SCREEN[c.from_user.id] = mid
-    await c.answer()
+    await go_home_clean(c)
 
 
 @dp.callback_query(F.data.startswith("plan:"))
@@ -261,8 +273,7 @@ async def private_lines_selected(c):
 
 @dp.callback_query(F.data == "nav:back")
 async def nav_back(c):
-    # za sada back = home
-    await nav_home(c)
+    await go_home_clean(c)
 
 @dp.message(Command("status"))
 async def status(m: Message):

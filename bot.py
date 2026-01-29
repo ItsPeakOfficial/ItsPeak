@@ -271,7 +271,8 @@ async def plan_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text2 = (
-        f"|🔴REC | You selected **{days} days** for {category_title(cat_key)}.\n\n"
+        f"|🔴REC | You selected *{days} DAYS* for {category_title(cat_key)}.\n\n"
+        "If you wish to buy with another crypto coin, feel free to message me at @ispodradara106.\n\n"
         "Choose crypto to pay:"
     )
     await send_screen(c, text2, coin_choice_kb(cat_key, days))
@@ -426,6 +427,7 @@ async def pay_nowpayments(c):
         f"💳 Pay here:\n{invoice_url}\n\n"
         f"📦 Category: {cat_title}\n"
         f"⏱ Selected plan: {days} days\n\n"
+        "*Please complete payment in the next 20 minutes!* If something happens, message me at @ispodradara106.\n\n"
         "✅ Access will be activated automatically after confirmation.",
         reply_markup=status_back_kb()
     )

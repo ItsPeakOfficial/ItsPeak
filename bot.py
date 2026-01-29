@@ -56,6 +56,23 @@ async def send_notice(c, text: str):
     msg = await c.message.answer(text)
     LAST_NOTICE[c.from_user.id] = msg.message_id
 
+async def safe_edit_or_replace(c, text: str, kb: InlineKeyboardMarkup):
+    """
+    Pokuša editati trenutnu poruku.
+    Ako ne može -> pošalje novu poruku i obriše staru, da se ne stacka.
+    """
+    try:
+        await c.message.edit_text(text, reply_markup=kb)
+        return c.message.message_id
+    except TelegramBadRequest:
+        msg = await c.message.answer(text, reply_markup=kb)
+        # obriši staru poruku koja je trebala biti editana
+        try:
+            await c.message.delete()
+        except Exception:
+            pass
+        return msg.message_id
+
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📩 Mejlovi Cloud 📩", callback_data="cat:mail_combo")],
@@ -171,15 +188,8 @@ async def open_category(c):
     text = f"{cat['title']}\n\n{cat['desc']}\n\n✨ Choose plan:"
     kb = kb_for_category(cat_key)
 
-    try:
-        await c.message.edit_text(text, reply_markup=kb)
-    except TelegramBadRequest:
-        # ako poruka ne postoji / ne može se editati, pošalji novu
-        msg = await c.message.answer(text, reply_markup=kb)
-        LAST_NOTICE[c.from_user.id] = msg.message_id
-
+    await safe_edit_or_replace(c, text, kb)
     await c.answer()
-
 
 
 @dp.callback_query(F.data == "nav:home")
@@ -189,11 +199,7 @@ async def nav_home(c):
     text = "🏠 Main menu\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
     kb = main_menu_kb()
 
-    try:
-        await c.message.edit_text(text, reply_markup=kb)
-    except TelegramBadRequest:
-        await c.message.answer(text, reply_markup=kb)
-
+    await safe_edit_or_replace(c, text, kb)
     await c.answer()
 
 

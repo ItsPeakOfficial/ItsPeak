@@ -90,13 +90,18 @@ async def safe_edit_or_replace(c, text: str, kb: InlineKeyboardMarkup):
             pass
         return msg.message_id
 
-async def send_screen(c, text: str, kb: InlineKeyboardMarkup):
-    """
-    Uvijek drži samo JEDAN screen message.
-    Obriše stari screen, pošalje novi, zapamti ga.
-    """
+async def send_screen(
+    c,
+    text: str,
+    kb: InlineKeyboardMarkup,
+    parse_mode: str | None = None,
+):
     await delete_last_screen(chat_id=c.message.chat.id, user_id=c.from_user.id)
-    msg = await c.message.answer(text, reply_markup=kb)
+    msg = await c.message.answer(
+        text,
+        reply_markup=kb,
+        parse_mode=parse_mode,
+    )
     LAST_SCREEN[c.from_user.id] = msg.message_id
     return msg.message_id
 
@@ -271,11 +276,16 @@ async def plan_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text2 = (
-        f"|🔴REC | You selected *{days} DAYS* for {category_title(cat_key)}.\n\n"
+        f"|🔴REC | You selected **{days} DAYS** for {category_title(cat_key)}.\n\n"
         "If you wish to buy with another crypto coin, feel free to message me at @ispodradara106.\n\n"
         "Choose crypto to pay:"
     )
-    await send_screen(c, text2, coin_choice_kb(cat_key, days))
+    await send_screen(
+        c,
+        text2,
+        coin_choice_kb(cat_key, days),
+        arse_mode="Markdown"
+    )
     await c.answer()
 
 @dp.callback_query(F.data.startswith("pl:"))
@@ -425,11 +435,13 @@ async def pay_nowpayments(c):
 
     msg = await c.message.answer(
         f"💳 Pay here:\n{invoice_url}\n\n"
-        f"📦 Category: {cat_title}\n"
-        f"⏱ Selected plan: {days} days\n\n"
-        "*Please complete payment in the next 20 minutes!*\n If something happens, message me at @ispodradara106.\n\n"
+        f"📦 **Category:** {cat_title}\n"
+        f"⏱ **Selected plan:** {days} days\n\n"
+        "*Please complete payment in the next 20 minutes!*\n"
+        "If something happens, message me at @ispodradara106.\n\n"
         "✅ Access will be activated automatically after confirmation.",
-        reply_markup=status_back_kb()
+        reply_markup=status_back_kb(),
+        parse_mode="Markdown"
     )
     LAST_NOTICE[c.from_user.id] = msg.message_id
     await c.answer()
@@ -480,10 +492,11 @@ async def pay_private_lines_nowpayments(c):
 
     msg = await c.message.answer(
         f"💳 Pay here:\n{invoice_url}\n\n"
-        f"📦 Category: {category_title('private_lines')}\n"
-        f"📦 Package: {info['title']} — ${info['price_usd']}\n\n"
+        f"📦 **Category:** {category_title('private_lines')}\n"
+        f"📦 **Package:** {info['title']} — ${info['price_usd']}\n\n"
         "✅ Delivery will be sent automatically after confirmation.",
-        reply_markup=status_back_kb()
+        reply_markup=status_back_kb(),
+        parse_mode="Markdown"
     )
     LAST_NOTICE[c.from_user.id] = msg.message_id
     await c.answer()

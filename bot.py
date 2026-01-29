@@ -553,8 +553,12 @@ def sub_type_label(k: str) -> str:
 async def admin_cmd(m: Message):
     if not is_admin(m.from_user.id):
         return await m.answer("⛔️ Nemaš pristup.")
-    await m.answer("🛠️ <b>ItsPeak Admin tools</b> - managing everything - buys, subscriptions, ids.", reply_markup=admin_menu_kb())
-
+    await m.answer(
+        "🛠️ <b>ItsPeak Admin tools</b> - managing everything - buys, subscriptions, ids.",
+        reply_markup=admin_menu_kb(),
+        parse_mode="HTML",
+    )
+    
 @dp.callback_query(F.data == "admin:menu")
 async def admin_menu_cb(c):
     if not is_admin(c.from_user.id):

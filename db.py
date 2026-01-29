@@ -133,6 +133,31 @@ async def get_subscription_expires_at(user_id: int) -> int:
             row = await cur.fetchone()
             return int(row[0]) if row else 0
 
+async def get_subscription_info(user_id: int):
+    """
+    Returns {"expires_at": int, "sub_type": str} or None
+    """
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT expires_at, sub_type FROM subscriptions WHERE user_id=$1",
+                user_id
+            )
+            if not row:
+                return None
+            return {"expires_at": int(row["expires_at"]), "sub_type": (row["sub_type"] or "")}
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            cur = await db.execute(
+                "SELECT expires_at, sub_type FROM subscriptions WHERE user_id=?",
+                (user_id,)
+            )
+            row = await cur.fetchone()
+            if not row:
+                return None
+            return {"expires_at": int(row[0]), "sub_type": (row[1] or "")}
 
 # ---------- TOKENS ----------
 async def create_token(user_id: int, ttl_seconds: int = 600) -> str:

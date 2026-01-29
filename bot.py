@@ -142,6 +142,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔐 FPV 🔐", callback_data="cat:private_lines")],
         [InlineKeyboardButton(text="🔗 URL 🔗", callback_data="cat:url_cloud")],
         [InlineKeyboardButton(text="🧪 Inekcije 🧪", callback_data="cat:injectables")],
+        [InlineKeyboardButton(text="⭐ My subscription", callback_data="me:sub")],
     ])
 
 def status_back_kb() -> InlineKeyboardMarkup:
@@ -297,6 +298,35 @@ async def open_category(c):
 async def nav_home(c):
     await go_home_clean(c)
 
+@dp.callback_query(F.data == "me:sub")
+async def my_subscription(c):
+    user_id = c.from_user.id
+    info = await db.get_subscription_info(user_id)
+
+    now = int(time.time())
+    if not info or info["expires_at"] <= now:
+        text = (
+            "⭐ <b>My subscription</b>\n\n"
+            "❌ You don't have an active subscription.\n\n"
+            "Use the menu above to buy a plan."
+        )
+        kb = status_back_kb()
+        await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
+        return await c.answer()
+
+    exp = info["expires_at"]
+    st = sub_type_label(info.get("sub_type", ""))
+
+    text = (
+        "⭐ <b>My subscription</b>\n\n"
+        f"📦 Type: <b>{st}</b>\n"
+        f"⏳ Expires: <code>{fmt_ts(exp)}</code>\n"
+        f"🕒 Remaining: <b>{fmt_remaining(exp)}</b>\n\n"
+        "ℹ️ (Plan length is not stored yet, only expiry date.)"
+    )
+    kb = status_back_kb()
+    await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
+    await c.answer()
 
 @dp.callback_query(F.data.startswith("plan:"))
 async def plan_selected(c):
@@ -521,6 +551,17 @@ def admin_pager_kb(prefix: str, page: int, has_prev: bool, has_next: bool) -> In
         row,
         [InlineKeyboardButton(text="🔙 Admin menu", callback_data="admin:menu")],
     ])
+
+def fmt_remaining(exp: int) -> str:
+    now = int(time.time())
+    left = exp - now
+    if left <= 0:
+        return "0 days"
+    days = left // 86400
+    hours = (left % 86400) // 3600
+    if days <= 0:
+        return f"{hours}h"
+    return f"{days}d {hours}h"
 
 def fmt_ts(ts: int) -> str:
     # prikaz u lokalnom formatu servera; ako želiš striktno UTC, reci pa mijenjam

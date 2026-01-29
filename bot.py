@@ -262,6 +262,14 @@ async def start(m: Message):
     except Exception:
         pass
 
+    await db.upsert_user(
+        user_id=m.from_user.id,
+        username=m.from_user.username or "",
+        first_name=m.from_user.first_name or "",
+        last_name=m.from_user.last_name or "",
+        ts=int(time.time()),
+    )
+
     # 2) obriši stari screen (ako postoji) da ne stacka menije
     await delete_last_screen(chat_id=m.chat.id, user_id=m.from_user.id)
 

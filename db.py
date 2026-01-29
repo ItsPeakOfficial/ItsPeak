@@ -63,6 +63,17 @@ async def init_db():
                 created_at BIGINT NOT NULL
             );
             """)
+
+            await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id BIGINT PRIMARY KEY,
+                username TEXT NOT NULL DEFAULT '',
+                first_name TEXT NOT NULL DEFAULT '',
+                last_name TEXT NOT NULL DEFAULT '',
+                started_at BIGINT NOT NULL DEFAULT 0,
+                last_seen BIGINT NOT NULL DEFAULT 0
+            );
+            """)
     else:
         import aiosqlite
         async with aiosqlite.connect(SQLITE_PATH) as db:
@@ -106,6 +117,19 @@ async def init_db():
                 created_at INTEGER NOT NULL
             )
             """)
+
+            await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT NOT NULL DEFAULT '',
+                first_name TEXT NOT NULL DEFAULT '',
+                last_name TEXT NOT NULL DEFAULT '',
+                started_at INTEGER NOT NULL DEFAULT 0,
+                last_seen INTEGER NOT NULL DEFAULT 0
+            )
+            """)
+
+
             await db.commit()
 
 
@@ -418,6 +442,92 @@ async def insert_private_lines_purchase(user_id: int, package: str, lines_count:
             )
             await db.commit()
 
+
+# ---------- USERS ----------
+async def upsert_user(
+    user_id: int,
+    username: str = "",
+    first_name: str = "",
+    last_name: str = "",
+    ts: int | None = None
+):
+    ts = int(ts or time.time())
+    username = (username or "").lstrip("@")
+    first_name = first_name or ""
+    last_name = last_name or ""
+
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            await conn.execute("""
+            INSERT INTO users (user_id, username, first_name, last_name, started_at, last_seen)
+            VALUES ($1, $2, $3, $4, $5, $5)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                username = EXCLUDED.username,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                last_seen = EXCLUDED.last_seen
+            """, user_id, username, first_name, last_name, ts)
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            await db.execute("""
+            INSERT INTO users (user_id, username, first_name, last_name, started_at, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                username=excluded.username,
+                first_name=excluded.first_name,
+                last_name=excluded.last_name,
+                last_seen=excluded.last_seen
+            """, (user_id, username, first_name, last_name, ts, ts))
+            await db.commit()
+
+
+async def get_users_page(limit: int = 10, offset: int = 0):
+    """
+    Returns (rows, total)
+    row: {"user_id": int, "username": str, "first_name": str, "last_name": str, "started_at": int, "last_seen": int}
+    """
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            total = await conn.fetchval("SELECT COUNT(*) FROM users")
+            rows = await conn.fetch(
+                "SELECT user_id, username, first_name, last_name, started_at, last_seen "
+                "FROM users ORDER BY last_seen DESC LIMIT $1 OFFSET $2",
+                limit, offset
+            )
+            out = [{
+                "user_id": int(r["user_id"]),
+                "username": r["username"] or "",
+                "first_name": r["first_name"] or "",
+                "last_name": r["last_name"] or "",
+                "started_at": int(r["started_at"] or 0),
+                "last_seen": int(r["last_seen"] or 0),
+            } for r in rows]
+            return out, int(total or 0)
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            cur = await db.execute("SELECT COUNT(*) FROM users")
+            total = (await cur.fetchone())[0]
+
+            cur = await db.execute(
+                "SELECT user_id, username, first_name, last_name, started_at, last_seen "
+                "FROM users ORDER BY last_seen DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            )
+            rows = await cur.fetchall()
+            out = [{
+                "user_id": int(r[0]),
+                "username": r[1] or "",
+                "first_name": r[2] or "",
+                "last_name": r[3] or "",
+                "started_at": int(r[4] or 0),
+                "last_seen": int(r[5] or 0),
+            } for r in rows]
+            return out, total
 
 async def get_private_lines_purchases_page(limit: int = 10, offset: int = 0):
     """

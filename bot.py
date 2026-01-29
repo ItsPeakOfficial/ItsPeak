@@ -300,7 +300,8 @@ async def private_lines_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text = (
-        f"✅ You selected <b>{info['title']}</b> — <b>${info['price_usd']}</b>\n\n"
+        f"🔴 REC | You selected <b>{info['title']}</b> — <b>${info['price_usd']}</b> for {category_title('private_lines')}.\n\n"
+        "If you wish to buy with another crypto coin, feel free to message me at @ispodradara106.\n\n"
         "Choose crypto to pay:"
     )
     await send_screen(c, text, private_lines_coin_kb(package))

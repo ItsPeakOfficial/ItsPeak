@@ -94,7 +94,7 @@ async def send_screen(
     c,
     text: str,
     kb: InlineKeyboardMarkup,
-    parse_mode: str | None = None,
+    parse_mode: str | None = "HTML",
 ):
     await delete_last_screen(chat_id=c.message.chat.id, user_id=c.from_user.id)
     msg = await c.message.answer(
@@ -300,10 +300,10 @@ async def private_lines_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text = (
-        f"✅ You selected **{info['title']}** — **${info['price_usd']}**\n\n"
+        f"✅ You selected <b>{info['title']}</b> — <b>${info['price_usd']}</b>\n\n"
         "Choose crypto to pay:"
     )
-    await send_screen(c, text, private_lines_coin_kb(package), parse_mode="Markdown")
+    await send_screen(c, text, private_lines_coin_kb(package))
     await c.answer()
 
 @dp.callback_query(F.data == "nav:back")

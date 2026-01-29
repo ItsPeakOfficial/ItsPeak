@@ -29,6 +29,7 @@ CATEGORIES = {
     },
 }
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+DEPLOY_ID = os.getenv("RAILWAY_DEPLOYMENT_ID", "local")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 LAST_NOTICE = {}  # user_id -> message_id
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
@@ -153,7 +154,7 @@ def safe_cat_key_from_pl(code: str) -> str:
 @dp.message(Command("start"))
 async def start(m: Message):
     await m.answer(
-        "👋 Welcome to ItsPeak shop!\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose category:",
+        "👋 Welcome to ItsPeak shop!\n\n⚙️ Deploy: {DEPLOY_ID}\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose category:",
         reply_markup=main_menu_kb()
     )
 
@@ -367,6 +368,7 @@ async def pay_nowpayments(c):
 
 async def main():
     await db.init_db()
+    print("✅ BOT STARTED ON RAILWAY")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

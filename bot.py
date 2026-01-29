@@ -255,12 +255,25 @@ def category_title(cat_key: str) -> str:
 
 @dp.message(Command("start"))
 async def start(m: Message):
-    await m.answer(
-        f"👋 Welcome to ItsPeak shop!\n\n⚙️ Deploy: {DEPLOY_ID}\n\n"
+    # 1) obriši userovu /start poruku (u privatnom chatu radi)
+    try:
+        await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
+    except Exception:
+        pass
+
+    # 2) obriši stari screen (ako postoji) da ne stacka menije
+    await delete_last_screen(chat_id=m.chat.id, user_id=m.from_user.id)
+
+    # 3) pošalji main menu kao jedini screen
+    text = (
+        "🏠 Main menu\n\n"
         "📞 If you need any help, feel free to contact me at @ispodradara106\n\n"
-        "⬇️ Choose category:",
-        reply_markup=main_menu_kb()
+        "⬇️ Choose the service you need down below:"
     )
+    msg = await m.answer(text, reply_markup=main_menu_kb())
+
+    # 4) zapamti da je to zadnji screen
+    LAST_SCREEN[m.from_user.id] = msg.message_id
 
 @dp.callback_query(F.data.startswith("cat:"))
 async def open_category(c):

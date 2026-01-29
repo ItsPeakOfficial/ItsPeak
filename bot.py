@@ -346,39 +346,6 @@ async def status(m: Message):
     msg = await m.answer(text, reply_markup=status_back_kb())
     LAST_NOTICE[m.from_user.id] = msg.message_id
 
-# Admin komanda (za početak): ručno aktivira 30 dana
-# Napomena: ovo je MVP. Kasnije ograničimo na tvoj user_id.
-@dp.message(Command("grant"))
-async def grant(m: Message):
-    # samo admin
-    if m.from_user.id != ADMIN_ID:
-        try:
-            await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
-        except Exception:
-            pass
-        return
-
-    # obriši userovu /grant poruku
-    try:
-        await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
-    except Exception:
-        pass
-
-    # logika granta
-    now = int(time.time())
-    expires_at = now + 30 * 24 * 60 * 60
-    await db.set_subscription(m.from_user.id, expires_at)
-
-    # obriši prethodni notice (ako postoji)
-    await delete_last_notice(chat_id=m.chat.id, user_id=m.from_user.id)
-
-    # pošalji grant poruku kao notice + back button
-    msg = await m.answer(
-        "✅ Access successfully activated for **30 days**.",
-        reply_markup=status_back_kb(),
-        parse_mode="Markdown"
-    )
-    LAST_NOTICE[m.from_user.id] = msg.message_id
 
 @dp.callback_query(F.data.startswith("access:"))
 async def access_callback(c):
@@ -556,6 +523,89 @@ async def admin_cmd(m: Message):
     await m.answer(
         "🛠️ <b>ItsPeak Admin tools:</b> managing everything - buys, subscriptions, ids.",
         reply_markup=admin_menu_kb(),
+        parse_mode="HTML",
+    )
+
+@dp.message(Command("grant_sub"))
+async def grant_sub(m: Message):
+    """
+    /grant_sub <user_id|me> <mail_combo|url_cloud|injectables> <days>
+    """
+    if not is_admin(m.from_user.id):
+        return
+
+    parts = m.text.split()
+    if len(parts) != 4:
+        return await m.answer(
+            "❌ Usage:\n"
+            "<code>/grant_sub &lt;user_id|me&gt; &lt;type&gt; &lt;days&gt;</code>\n\n"
+            "Types: mail_combo, url_cloud, injectables",
+            parse_mode="HTML",
+        )
+
+    _, user_raw, sub_type, days_raw = parts
+
+    if user_raw == "me":
+        user_id = m.from_user.id
+    else:
+        try:
+            user_id = int(user_raw)
+        except ValueError:
+            return await m.answer("❌ Invalid user_id")
+
+    if sub_type not in ("mail_combo", "url_cloud", "injectables"):
+        return await m.answer("❌ Invalid subscription type")
+
+    try:
+        days = int(days_raw)
+    except ValueError:
+        return await m.answer("❌ Days must be a number")
+
+    expires_at = int(time.time()) + days * 86400
+    await db.set_subscription(user_id, expires_at, sub_type=sub_type)
+
+    user_label = await format_user_identity(user_id)
+
+    await m.answer(
+        f"✅ <b>Subscription granted</b>\n\n"
+        f"👤 {user_label}\n"
+        f"📦 {sub_type_label(sub_type)}\n"
+        f"⏳ {days} days",
+        parse_mode="HTML",
+    )
+
+@dp.message(Command("ungrant_sub"))
+async def ungrant_sub(m: Message):
+    """
+    /ungrant_sub <user_id|me>
+    """
+    if not is_admin(m.from_user.id):
+        return
+
+    parts = m.text.split()
+    if len(parts) != 2:
+        return await m.answer(
+            "❌ Usage:\n<code>/ungrant_sub &lt;user_id|me&gt;</code>",
+            parse_mode="HTML",
+        )
+
+    _, user_raw = parts
+
+    if user_raw == "me":
+        user_id = m.from_user.id
+    else:
+        try:
+            user_id = int(user_raw)
+        except ValueError:
+            return await m.answer("❌ Invalid user_id")
+
+    # expiry u prošlost = revoke
+    await db.set_subscription(user_id, 0, sub_type="")
+
+    user_label = await format_user_identity(user_id)
+
+    await m.answer(
+        f"🗑️ <b>Subscription removed</b>\n\n👤 {user_label}",
         parse_mode="HTML",
     )
 

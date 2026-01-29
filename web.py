@@ -6,6 +6,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from dotenv import load_dotenv
+from typing import Optional
 
 import db
 
@@ -57,11 +58,16 @@ async def access(token: str):
     return HTMLResponse(html)
 
 @app.post("/pay/nowpayments/create")
-async def create_nowpayments_invoice(user_id: int, days: int, pay_currency: str):
-    price_map = {10: 15, 30: 30, 90: 60}
-
-    if days not in price_map:
-        raise HTTPException(status_code=400, detail="Invalid plan")
+async def create_nowpayments_invoice(
+    user_id: int,
+    pay_currency: str,
+    days: Optional[int] = None,
+    kind: str = "subscription",
+    package: Optional[str] = None,
+):
+    # cijene
+    price_map_days = {10: 15, 30: 30, 90: 60}
+    price_map_private = {"1k": 10, "5k": 30, "10k": 50, "30k": 100}
 
     allowed = {"btc", "ltc", "eth", "usdttrc20"}
     if pay_currency not in allowed:
@@ -74,12 +80,29 @@ async def create_nowpayments_invoice(user_id: int, days: int, pay_currency: str)
     if not BASE_URL:
         raise HTTPException(status_code=500, detail="BASE_URL missing")
 
+    # odredi amount + order_id + opis
+    kind = (kind or "subscription").lower()
+
+    if kind == "private_lines":
+        if not package or package not in price_map_private:
+            raise HTTPException(status_code=400, detail="Invalid package")
+        amount_usd = price_map_private[package]
+        order_id = f"pl:{user_id}:{package}"
+        desc = f"Private lines package {package}"
+    else:
+        # default: subscription
+        if days is None or days not in price_map_days:
+            raise HTTPException(status_code=400, detail="Invalid plan")
+        amount_usd = price_map_days[days]
+        order_id = f"sub:{user_id}:{days}"
+        desc = f"{days} days access"
+
     payload = {
-        "price_amount": price_map[days],
+        "price_amount": amount_usd,
         "price_currency": "usd",
         "pay_currency": pay_currency,
-        "order_id": f"{user_id}:{days}",
-        "order_description": f"{days} days access",
+        "order_id": order_id,
+        "order_description": desc,
         "ipn_callback_url": f"{BASE_URL}/webhook/nowpayments",
     }
 
@@ -92,7 +115,6 @@ async def create_nowpayments_invoice(user_id: int, days: int, pay_currency: str)
     print("NOWPayments body:", r.text)
 
     if r.status_code not in (200, 201):
-        # vrati isti status kao NOWPayments + JSON ako postoji
         try:
             return JSONResponse(status_code=r.status_code, content=r.json())
         except Exception:
@@ -129,14 +151,25 @@ async def nowpayments_webhook(request: Request):
         return {"status": "ignored"}
 
     order_id = data.get("order_id", "")
-    if ":" not in order_id:
-        return {"status": "bad_order_id"}
 
-    user_id_str, days_str = order_id.split(":", 1)
+    # očekujemo: "sub:user:days" ili "pl:user:package"
+    parts = order_id.split(":")
+    if len(parts) != 3:
+        return {"status": "bad_order_id", "order_id": order_id}
+
+    kind, user_id_str, third = parts
     user_id = int(user_id_str)
-    days = int(days_str)
 
-    expires_at = int(time.time()) + days * 86400
-    await db.set_subscription(user_id, expires_at)
+    if kind == "sub":
+        days = int(third)
+        expires_at = int(time.time()) + days * 86400
+        await db.set_subscription(user_id, expires_at)
+        return {"status": "ok", "kind": "sub"}
 
-    return {"status": "ok"}
+    if kind == "pl":
+        package = third
+        # za sada samo potvrdi (kasnije: delivery system / record purchase u DB)
+        # možeš ovdje upisati u bazu "private_lines_purchase" tablicu, ali to ćemo kasnije.
+        return {"status": "ok", "kind": "pl", "package": package}
+
+    return {"status": "unknown_kind", "order_id": order_id}

@@ -429,10 +429,6 @@ async def main():
     print("✅ BOT STARTED ON RAILWAY")
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
-
 @dp.callback_query(F.data.startswith("plcoin:"))
 async def pay_private_lines_nowpayments(c):
     # plcoin:btc:1k
@@ -480,3 +476,7 @@ async def pay_private_lines_nowpayments(c):
     )
     LAST_NOTICE[c.from_user.id] = msg.message_id
     await c.answer()
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())

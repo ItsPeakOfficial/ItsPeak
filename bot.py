@@ -300,7 +300,7 @@ async def private_lines_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text = (
-        f"🔴 REC | You selected <b>{info['title']}</b> — <b>${info['price_usd']}</b> for {category_title('private_lines')}.\n\n"
+        f"|🔴 REC | You selected <b>{info['title']}</b> — <b>${info['price_usd']}</b> for {category_title('private_lines')}.\n\n"
         "If you wish to buy with another crypto coin, feel free to message me at @ispodradara106.\n\n"
         "Choose crypto to pay:"
     )
@@ -415,6 +415,7 @@ async def pay_nowpayments(c):
                 "user_id": c.from_user.id,
                 "days": days,
                 "pay_currency": coin,
+                "cat_key": cat_key,
             },
         ) as r:
             if r.status != 200:
@@ -496,6 +497,132 @@ async def pay_private_lines_nowpayments(c):
         parse_mode="Markdown"
     )
     LAST_NOTICE[c.from_user.id] = msg.message_id
+    await c.answer()
+
+ADMIN_PAGE_SIZE = 10
+
+def is_admin(user_id: int) -> bool:
+    return ADMIN_ID and user_id == ADMIN_ID
+
+def admin_menu_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📦 Subscriptions", callback_data="admin:subs:1")],
+        [InlineKeyboardButton(text="📈 Priv Lines (last buys)", callback_data="admin:pl:1")],
+        [InlineKeyboardButton(text="🏠 Home", callback_data="nav:home")],
+    ])
+
+def admin_pager_kb(prefix: str, page: int, has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
+    row = []
+    if has_prev:
+        row.append(InlineKeyboardButton(text="⬅️ Prev", callback_data=f"{prefix}:{page-1}"))
+    row.append(InlineKeyboardButton(text="🔄 Refresh", callback_data=f"{prefix}:{page}"))
+    if has_next:
+        row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"{prefix}:{page+1}"))
+
+    return InlineKeyboardMarkup(inline_keyboard=[
+        row,
+        [InlineKeyboardButton(text="🔙 Admin menu", callback_data="admin:menu")],
+    ])
+
+def fmt_ts(ts: int) -> str:
+    # prikaz u lokalnom formatu servera; ako želiš striktno UTC, reci pa mijenjam
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
+
+def sub_type_label(k: str) -> str:
+    return {
+        "mail_combo": "📩 Cloud",
+        "url_cloud": "🔗 URL",
+        "injectables": "🧪 Injections",
+        "unknown": "❓ Unknown",
+        "": "❓ Unknown",
+    }.get(k, k)
+
+@dp.message(Command("admin"))
+async def admin_cmd(m: Message):
+    if not is_admin(m.from_user.id):
+        return await m.answer("⛔️ Nemaš pristup.")
+    await m.answer("🛠️ Admin tools", reply_markup=admin_menu_kb())
+
+@dp.callback_query(F.data == "admin:menu")
+async def admin_menu_cb(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+    await safe_edit_or_replace(c, "🛠️ Admin tools", admin_menu_kb())
+    await c.answer()
+
+@dp.callback_query(F.data.startswith("admin:subs:"))
+async def admin_subs_list(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+
+    page = int(c.data.split(":")[-1])
+    page = max(1, page)
+
+    offset = (page - 1) * ADMIN_PAGE_SIZE
+    rows, total = await db.get_subscriptions_page(limit=ADMIN_PAGE_SIZE, offset=offset)
+
+    pages = (total + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE if total else 1
+    has_prev = page > 1
+    has_next = page < pages
+
+    now = int(time.time())
+
+    text_lines = [f"📦 <b>Subscriptions</b> (page {page}/{pages})\n"]
+    if not rows:
+        text_lines.append("— nema zapisa —")
+    else:
+        for r in rows:
+            uid = r["user_id"]
+            exp = r["expires_at"]
+            st = sub_type_label(r.get("sub_type", ""))
+
+            badge = "🟢 ACTIVE" if exp > now else "🔴 EXPIRED"
+            text_lines.append(
+                f"{badge} <b>{uid}</b> — {st}\n"
+                f"⏳ expires: <code>{fmt_ts(exp)}</code>"
+            )
+
+    text = "\n\n".join(text_lines)
+    kb = admin_pager_kb("admin:subs", page, has_prev, has_next)
+
+    await safe_edit_or_replace(c, text, kb)
+    await c.answer()
+
+@dp.callback_query(F.data.startswith("admin:pl:"))
+async def admin_private_lines_list(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+
+    page = int(c.data.split(":")[-1])
+    page = max(1, page)
+
+    offset = (page - 1) * ADMIN_PAGE_SIZE
+    rows, total = await db.get_private_lines_purchases_page(limit=ADMIN_PAGE_SIZE, offset=offset)
+
+    pages = (total + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE if total else 1
+    has_prev = page > 1
+    has_next = page < pages
+
+    text_lines = [f"📈 <b>Priv Lines — last buys</b> (page {page}/{pages})\n"]
+    if not rows:
+        text_lines.append("— nema kupnji —")
+    else:
+        for r in rows:
+            uid = r["user_id"]
+            pkg = r["package"]
+            cnt = r["lines_count"]
+            usd = r["price_usd"]
+            ts = r["created_at"]
+
+            text_lines.append(
+                f"🧾 <b>{uid}</b> — <b>{pkg}</b> — <code>{cnt}</code> lines — <b>${usd}</b>\n"
+                f"🕒 <code>{fmt_ts(ts)}</code>"
+            )
+
+    text = "\n\n".join(text_lines)
+    kb = admin_pager_kb("admin:pl", page, has_prev, has_next)
+
+    await safe_edit_or_replace(c, text, kb)
     await c.answer()
 
 async def main():

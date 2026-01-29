@@ -64,6 +64,7 @@ async def create_nowpayments_invoice(
     days: Optional[int] = None,
     kind: str = "subscription",
     package: Optional[str] = None,
+    cat_key: Optional[str] = None,
 ):
     # cijene
     price_map_days = {10: 15, 30: 30, 90: 60}
@@ -94,8 +95,9 @@ async def create_nowpayments_invoice(
         if days is None or days not in price_map_days:
             raise HTTPException(status_code=400, detail="Invalid plan")
         amount_usd = price_map_days[days]
-        order_id = f"sub:{user_id}:{days}"
-        desc = f"{days} days access"
+        ck = (cat_key or "unknown").strip()
+        order_id = f"sub:{user_id}:{ck}:{days}"
+        desc = f"{days} days access ({ck})"
 
     payload = {
         "price_amount": amount_usd,
@@ -152,24 +154,46 @@ async def nowpayments_webhook(request: Request):
 
     order_id = data.get("order_id", "")
 
-    # očekujemo: "sub:user:days" ili "pl:user:package"
+     # očekujemo:
+    # - subscription: "sub:user:cat_key:days"
+    # - private lines: "pl:user:package"
     parts = order_id.split(":")
-    if len(parts) != 3:
+
+    if len(parts) < 3:
         return {"status": "bad_order_id", "order_id": order_id}
 
-    kind, user_id_str, third = parts
-    user_id = int(user_id_str)
+    kind = parts[0]
+    user_id = int(parts[1])
 
     if kind == "sub":
-        days = int(third)
+        # novi format sub:user:cat:days  (len==4)
+        # legacy format sub:user:days    (len==3)
+        if len(parts) == 4:
+            cat_key = parts[2]
+            days = int(parts[3])
+        else:
+            cat_key = "unknown"
+            days = int(parts[2])
+
         expires_at = int(time.time()) + days * 86400
-        await db.set_subscription(user_id, expires_at)
-        return {"status": "ok", "kind": "sub"}
+        await db.set_subscription(user_id, expires_at, sub_type=cat_key)
+        return {"status": "ok", "kind": "sub", "cat_key": cat_key}
 
     if kind == "pl":
-        package = third
-        # za sada samo potvrdi (kasnije: delivery system / record purchase u DB)
-        # možeš ovdje upisati u bazu "private_lines_purchase" tablicu, ali to ćemo kasnije.
+        package = parts[2]
+
+        price_map_private = {"1k": 10, "5k": 30, "10k": 50, "30k": 100}
+        lines_map = {"1k": 1000, "5k": 5000, "10k": 10000, "30k": 30000}
+
+        if package in price_map_private and package in lines_map:
+            await db.insert_private_lines_purchase(
+                user_id=user_id,
+                package=package,
+                lines_count=lines_map[package],
+                price_usd=price_map_private[package],
+                created_at=int(time.time()),
+            )
+
         return {"status": "ok", "kind": "pl", "package": package}
 
     return {"status": "unknown_kind", "order_id": order_id}

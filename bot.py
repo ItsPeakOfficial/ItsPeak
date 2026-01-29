@@ -317,12 +317,14 @@ async def my_subscription(c):
     exp = info["expires_at"]
     st = sub_type_label(info.get("sub_type", ""))
 
+    plan_days = int(info.get("plan_days") or 0)
+
     text = (
         "⭐ <b>My subscription</b>\n\n"
         f"📦 Type: <b>{st}</b>\n"
+        f"🧾 Plan: <b>{plan_days} days</b>\n"
         f"⏳ Expires: <code>{fmt_ts(exp)}</code>\n"
-        f"🕒 Remaining: <b>{fmt_remaining(exp)}</b>\n\n"
-        "ℹ️ (Plan length is not stored yet, only expiry date.)"
+        f"🕒 Remaining: <b>{fmt_remaining(exp)}</b>\n"
     )
     kb = status_back_kb()
     await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
@@ -636,8 +638,15 @@ async def grant_sub(m: Message):
     except ValueError:
         return await m.answer("❌ Days must be a number")
 
-    expires_at = int(time.time()) + days * 86400
-    await db.set_subscription(user_id, expires_at, sub_type=sub_type)
+    now_ts = int(time.time())
+    expires_at = now_ts + days * 86400
+    await db.set_subscription(
+        user_id,
+        expires_at,
+        sub_type=sub_type,
+        plan_days=days,
+        starts_at=now_ts,
+)
 
     user_label = await format_user_identity(user_id)
 
@@ -683,7 +692,7 @@ async def ungrant_sub(m: Message):
             return await m.answer("❌ Invalid user_id")
 
     # expiry u prošlost = revoke
-    await db.set_subscription(user_id, 0, sub_type="")
+    await db.set_subscription(user_id, 0, sub_type="", plan_days=0, starts_at=0)
 
     user_label = await format_user_identity(user_id)
 

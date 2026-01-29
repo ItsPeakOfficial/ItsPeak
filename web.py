@@ -175,9 +175,18 @@ async def nowpayments_webhook(request: Request):
             cat_key = "unknown"
             days = int(parts[2])
 
-        expires_at = int(time.time()) + days * 86400
-        await db.set_subscription(user_id, expires_at, sub_type=cat_key)
-        return {"status": "ok", "kind": "sub", "cat_key": cat_key}
+        now_ts = int(time.time())
+        expires_at = now_ts + days * 86400
+
+        await db.set_subscription(
+            user_id,
+            expires_at,
+            sub_type=cat_key,
+            plan_days=days,
+            starts_at=now_ts,
+        )
+
+        return {"status": "ok", "kind": "sub", "cat_key": cat_key, "days": days}
 
     if kind == "pl":
         package = parts[2]

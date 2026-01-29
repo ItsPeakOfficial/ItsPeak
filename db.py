@@ -35,6 +35,16 @@ async def init_db():
             except Exception:
                 pass
 
+            try:
+                await conn.execute("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS plan_days BIGINT NOT NULL DEFAULT 0;")
+            except Exception:
+                pass
+
+            try:
+                await conn.execute("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS starts_at BIGINT NOT NULL DEFAULT 0;")
+            except Exception:
+                pass
+
             await conn.execute("""
             CREATE TABLE IF NOT EXISTS access_tokens (
                 token TEXT PRIMARY KEY,
@@ -69,6 +79,16 @@ async def init_db():
             except Exception:
                 pass
 
+            try:
+                await db.execute("ALTER TABLE subscriptions ADD COLUMN plan_days INTEGER NOT NULL DEFAULT 0;")
+            except Exception:
+                pass
+
+            try:
+                await db.execute("ALTER TABLE subscriptions ADD COLUMN starts_at INTEGER NOT NULL DEFAULT 0;")
+            except Exception:
+                pass
+
             await db.execute("""
             CREATE TABLE IF NOT EXISTS access_tokens (
                 token TEXT PRIMARY KEY,
@@ -90,26 +110,35 @@ async def init_db():
 
 
 # ---------- SUBSCRIPTIONS ----------
-async def set_subscription(user_id: int, expires_at: int, sub_type: str = ""):
-    # sub_type = npr. "mail_combo", "url_cloud", "injectables"
+async def set_subscription(
+    user_id: int,
+    expires_at: int,
+    sub_type: str = "",
+    plan_days: int = 0,
+    starts_at: int = 0,
+):
+    # plan_days = 10/30/90, starts_at = timestamp kad je aktivirano
     if DATABASE_URL:
         pool = await _pg()
         async with pool.acquire() as conn:
             await conn.execute("""
-            INSERT INTO subscriptions (user_id, expires_at, sub_type)
-            VALUES ($1, $2, $3)
+            INSERT INTO subscriptions (user_id, expires_at, sub_type, plan_days, starts_at)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (user_id)
             DO UPDATE SET
                 expires_at = EXCLUDED.expires_at,
-                sub_type = EXCLUDED.sub_type
-            """, user_id, expires_at, sub_type or "")
+                sub_type = EXCLUDED.sub_type,
+                plan_days = EXCLUDED.plan_days,
+                starts_at = EXCLUDED.starts_at
+            """, user_id, expires_at, sub_type or "", int(plan_days or 0), int(starts_at or 0))
     else:
         import aiosqlite
         async with aiosqlite.connect(SQLITE_PATH) as db:
             await db.execute(
-                "INSERT INTO subscriptions (user_id, expires_at, sub_type) VALUES (?, ?, ?) "
-                "ON CONFLICT(user_id) DO UPDATE SET expires_at=excluded.expires_at, sub_type=excluded.sub_type",
-                (user_id, expires_at, sub_type or ""),
+                "INSERT INTO subscriptions (user_id, expires_at, sub_type, plan_days, starts_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET "
+                "expires_at=excluded.expires_at, sub_type=excluded.sub_type, plan_days=excluded.plan_days, starts_at=excluded.starts_at",
+                (user_id, expires_at, sub_type or "", int(plan_days or 0), int(starts_at or 0)),
             )
             await db.commit()
 
@@ -135,29 +164,41 @@ async def get_subscription_expires_at(user_id: int) -> int:
 
 async def get_subscription_info(user_id: int):
     """
-    Returns {"expires_at": int, "sub_type": str} or None
+    Returns:
+      {"expires_at": int, "sub_type": str, "plan_days": int, "starts_at": int}
+    or None if user doesn't exist in table.
     """
     if DATABASE_URL:
         pool = await _pg()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT expires_at, sub_type FROM subscriptions WHERE user_id=$1",
+                "SELECT expires_at, sub_type, plan_days, starts_at FROM subscriptions WHERE user_id=$1",
                 user_id
             )
             if not row:
                 return None
-            return {"expires_at": int(row["expires_at"]), "sub_type": (row["sub_type"] or "")}
+            return {
+                "expires_at": int(row["expires_at"]),
+                "sub_type": (row["sub_type"] or ""),
+                "plan_days": int(row["plan_days"] or 0),
+                "starts_at": int(row["starts_at"] or 0),
+            }
     else:
         import aiosqlite
         async with aiosqlite.connect(SQLITE_PATH) as db:
             cur = await db.execute(
-                "SELECT expires_at, sub_type FROM subscriptions WHERE user_id=?",
+                "SELECT expires_at, sub_type, plan_days, starts_at FROM subscriptions WHERE user_id=?",
                 (user_id,)
             )
             row = await cur.fetchone()
             if not row:
                 return None
-            return {"expires_at": int(row[0]), "sub_type": (row[1] or "")}
+            return {
+                "expires_at": int(row[0]),
+                "sub_type": (row[1] or ""),
+                "plan_days": int(row[2] or 0),
+                "starts_at": int(row[3] or 0),
+            }
 
 # ---------- TOKENS ----------
 async def create_token(user_id: int, ttl_seconds: int = 600) -> str:

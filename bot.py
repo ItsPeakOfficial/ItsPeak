@@ -276,7 +276,7 @@ async def plan_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text2 = (
-        f"|🔴REC | You selected **{days} DAYS** for {category_title(cat_key)}.\n\n"
+        f"|🔴 REC | You selected <b>{days} DAYS</b> for {category_title(cat_key)}.\n\n"
         "If you wish to buy with another crypto coin, feel free to message me at @ispodradara106.\n\n"
         "Choose crypto to pay:"
     )
@@ -284,7 +284,7 @@ async def plan_selected(c):
         c,
         text2,
         coin_choice_kb(cat_key, days),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     await c.answer()
 
@@ -303,7 +303,7 @@ async def private_lines_selected(c):
         f"✅ You selected **{info['title']}** — **${info['price_usd']}**\n\n"
         "Choose crypto to pay:"
     )
-    await send_screen(c, text, private_lines_coin_kb(package))
+    await send_screen(c, text, private_lines_coin_kb(package), parse_mode="Markdown")
     await c.answer()
 
 @dp.callback_query(F.data == "nav:back")
@@ -438,7 +438,7 @@ async def pay_nowpayments(c):
         f"💳 Pay here:\n{invoice_url}\n\n"
         f"📦 **Category:** {cat_title}\n"
         f"⏱ **Selected plan:** {days} days\n\n"
-        "*Please complete payment in the next 20 minutes!*\n"
+        "*Please complete payment in the next 20 minutes!*\n\n"
         "If something happens, message me at @ispodradara106.\n\n"
         "✅ Access will be activated automatically after confirmation.",
         reply_markup=status_back_kb(),

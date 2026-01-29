@@ -58,6 +58,11 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🧪 Injectables Cloud 🧪", callback_data="cat:injectables")],
     ])
 
+def status_back_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏠 Back to menu", callback_data="nav:home")],
+    ])
+
 def category_menu_kb(cat_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔓 Pristup", callback_data=f"access:{cat_key}")],
@@ -211,12 +216,26 @@ async def nav_back(c):
 
 @dp.message(Command("status"))
 async def status(m: Message):
+    # 1) obriši userovu /status poruku (u privatnom chatu radi)
+    try:
+        await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
+    except Exception:
+        pass
+
     now = int(time.time())
     exp = await db.get_subscription_expires_at(m.from_user.id)
+
     if exp > now:
-        await m.answer(f"✅ Imaš pristup do: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(exp))}")
+        text = f"✅ Access active until: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(exp))}"
     else:
-        await m.answer("❌ Nemaš aktivan pristup.")
+        text = "❌ No active access."
+
+    # 2) pošalji status poruku kao "notice" (da se može brisati)
+    # koristimo tvoj LAST_NOTICE sistem
+    # fake callback object nemamo, pa ručno: obriši prethodni notice pa pošalji novi
+    await delete_last_notice(chat_id=m.chat.id, user_id=m.from_user.id)
+    msg = await m.answer(text, reply_markup=status_back_kb())
+    LAST_NOTICE[m.from_user.id] = msg.message_id
 
 # Admin komanda (za početak): ručno aktivira 30 dana
 # Napomena: ovo je MVP. Kasnije ograničimo na tvoj user_id.

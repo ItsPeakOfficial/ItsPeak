@@ -32,6 +32,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 DEPLOY_ID = os.getenv("RAILWAY_DEPLOYMENT_ID", "local")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 LAST_NOTICE = {}  # user_id -> message_id
+LAST_SCREEN = {}  # user_id -> message_id (zadnji "menu/screen" koji treba ostati samo jedan)
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
 BASE_URL = (BASE_URL or "").strip().rstrip("/")
 if BASE_URL and not BASE_URL.startswith(("http://", "https://")):
@@ -49,6 +50,16 @@ async def delete_last_notice(chat_id: int, user_id: int):
     except Exception:
         pass
     LAST_NOTICE.pop(user_id, None)
+
+async def delete_last_screen(chat_id: int, user_id: int):
+    msg_id = LAST_SCREEN.get(user_id)
+    if not msg_id:
+        return
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+    except Exception:
+        pass
+    LAST_SCREEN.pop(user_id, None)
 
 async def send_notice(c, text: str):
     # izbriši prethodni notice pa pošalji novi i zapamti ga
@@ -72,6 +83,16 @@ async def safe_edit_or_replace(c, text: str, kb: InlineKeyboardMarkup):
         except Exception:
             pass
         return msg.message_id
+
+async def send_screen(c, text: str, kb: InlineKeyboardMarkup):
+    """
+    Uvijek drži samo JEDAN screen message.
+    Obriše stari screen, pošalje novi, zapamti ga.
+    """
+    await delete_last_screen(chat_id=c.message.chat.id, user_id=c.from_user.id)
+    msg = await c.message.answer(text, reply_markup=kb)
+    LAST_SCREEN[c.from_user.id] = msg.message_id
+    return msg.message_id
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -188,7 +209,8 @@ async def open_category(c):
     text = f"{cat['title']}\n\n{cat['desc']}\n\n✨ Choose plan:"
     kb = kb_for_category(cat_key)
 
-    await safe_edit_or_replace(c, text, kb)
+    mid = await safe_edit_or_replace(c, text, kb)
+    LAST_SCREEN[c.from_user.id] = mid
     await c.answer()
 
 
@@ -199,7 +221,8 @@ async def nav_home(c):
     text = "🏠 Main menu\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
     kb = main_menu_kb()
 
-    await safe_edit_or_replace(c, text, kb)
+    mid = await safe_edit_or_replace(c, text, kb)
+    LAST_SCREEN[c.from_user.id] = mid
     await c.answer()
 
 
@@ -210,12 +233,11 @@ async def plan_selected(c):
 
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
-    msg = await c.message.answer(
+    text2 = (
         f"✅ You selected **{days} days** for {CATEGORIES[cat_key]['title']}.\n\n"
-        "Choose crypto to pay:",
-        reply_markup=coin_choice_kb(cat_key, days)
+        "Choose crypto to pay:"
     )
-    LAST_NOTICE[c.from_user.id] = msg.message_id
+    await send_screen(c, text2, coin_choice_kb(cat_key, days))
     await c.answer()
 
 @dp.callback_query(F.data.startswith("pl:"))

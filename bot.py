@@ -241,14 +241,34 @@ async def status(m: Message):
 # Napomena: ovo je MVP. Kasnije ograničimo na tvoj user_id.
 @dp.message(Command("grant"))
 async def grant(m: Message):
+    # samo admin
     if m.from_user.id != ADMIN_ID:
-        await m.answer("⛔ Nemaš ovlaštenje za ovu komandu.")
+        try:
+            await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
+        except Exception:
+            pass
         return
 
+    # obriši userovu /grant poruku
+    try:
+        await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
+    except Exception:
+        pass
+
+    # logika granta
     now = int(time.time())
     expires_at = now + 30 * 24 * 60 * 60
     await db.set_subscription(m.from_user.id, expires_at)
-    await m.answer("✅ Aktivirao sam pristup na 30 dana (SQLite).")
+
+    # obriši prethodni notice (ako postoji)
+    await delete_last_notice(chat_id=m.chat.id, user_id=m.from_user.id)
+
+    # pošalji grant poruku kao notice + back button
+    msg = await m.answer(
+        "✅ Access successfully activated for **30 days**.",
+        reply_markup=status_back_kb()
+    )
+    LAST_NOTICE[m.from_user.id] = msg.message_id
 
 @dp.callback_query(F.data.startswith("access:"))
 async def access_callback(c):

@@ -651,6 +651,47 @@ async def format_user_identity(user_id: int) -> str:
     except Exception:
         return str(user_id)
 
+@dp.callback_query(F.data.startswith("admin:subs:"))
+async def admin_subs_list(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+
+    page = int(c.data.split(":")[-1])
+    page = max(1, page)
+
+    offset = (page - 1) * ADMIN_PAGE_SIZE
+    rows, total = await db.get_subscriptions_page(
+        limit=ADMIN_PAGE_SIZE,
+        offset=offset,
+    )
+
+    pages = (total + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE if total else 1
+    has_prev = page > 1
+    has_next = page < pages
+
+    text_lines = [f"🟢 <b>Active subscriptions</b> (page {page}/{pages})\n"]
+
+    if not rows:
+        text_lines.append("— nema aktivnih subscriptiona —")
+    else:
+        for r in rows:
+            uid = r["user_id"]
+            exp = r["expires_at"]
+            st = sub_type_label(r.get("sub_type", ""))
+
+            user_label = await format_user_identity(uid)
+
+            text_lines.append(
+                f"🟢 <b>{user_label}</b> — {st}\n"
+                f"⏳ expires: <code>{fmt_ts(exp)}</code>"
+            )
+
+    text = "\n\n".join(text_lines)
+    kb = admin_pager_kb("admin:subs", page, has_prev, has_next)
+
+    await safe_edit_or_replace(c, text, kb)
+    await c.answer()
+
 @dp.callback_query(F.data.startswith("admin:expired:"))
 async def admin_expired_list(c):
     if not is_admin(c.from_user.id):

@@ -284,7 +284,7 @@ async def plan_selected(c):
         c,
         text2,
         coin_choice_kb(cat_key, days),
-        arse_mode="Markdown"
+        parse_mode="Markdown"
     )
     await c.answer()
 
@@ -362,7 +362,8 @@ async def grant(m: Message):
     # pošalji grant poruku kao notice + back button
     msg = await m.answer(
         "✅ Access successfully activated for **30 days**.",
-        reply_markup=status_back_kb()
+        reply_markup=status_back_kb(),
+        parse_mode="Markdown"
     )
     LAST_NOTICE[m.from_user.id] = msg.message_id
 
@@ -446,11 +447,6 @@ async def pay_nowpayments(c):
     LAST_NOTICE[c.from_user.id] = msg.message_id
     await c.answer()
 
-async def main():
-    await db.init_db()
-    print("✅ BOT STARTED ON RAILWAY")
-    await dp.start_polling(bot)
-
 @dp.callback_query(F.data.startswith("plcoin:"))
 async def pay_private_lines_nowpayments(c):
     # plcoin:btc:1k
@@ -500,6 +496,11 @@ async def pay_private_lines_nowpayments(c):
     )
     LAST_NOTICE[c.from_user.id] = msg.message_id
     await c.answer()
+
+async def main():
+    await db.init_db()
+    print("✅ BOT STARTED ON RAILWAY")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     import asyncio

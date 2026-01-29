@@ -526,11 +526,23 @@ def sub_type_label(k: str) -> str:
 async def admin_cmd(m: Message):
     if not is_admin(m.from_user.id):
         return await m.answer("⛔️ Nemaš pristup.")
-    await m.answer(
+
+    # 1) obriši userovu /admin komandu
+    try:
+        await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
+    except Exception:
+        pass
+
+    # 2) obriši stari screen (npr. Main menu) da ne ostane iznad
+    await delete_last_screen(chat_id=m.chat.id, user_id=m.from_user.id)
+
+    # 3) pošalji admin panel kao "screen" i zapamti ga
+    msg = await m.answer(
         "🛠️ <b>ItsPeak Admin tools:</b> managing everything - buys, subscriptions, ids.",
         reply_markup=admin_menu_kb(),
         parse_mode="HTML",
     )
+    LAST_SCREEN[m.from_user.id] = msg.message_id
 
 @dp.message(Command("grant_sub"))
 async def grant_sub(m: Message):

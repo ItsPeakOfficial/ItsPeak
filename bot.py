@@ -28,6 +28,12 @@ CATEGORIES = {
         "desc": "💎 opis",
     },
 }
+PRIVATE_LINE_PACKAGES = {
+    "1k": {"title": "1k lines", "price_usd": 10},
+    "5k": {"title": "5k lines", "price_usd": 30},
+    "10k": {"title": "10k lines", "price_usd": 50},
+    "30k": {"title": "30k lines", "price_usd": 100},
+}
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 DEPLOY_ID = os.getenv("RAILWAY_DEPLOYMENT_ID", "local")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -138,6 +144,19 @@ def coin_choice_kb(cat_key: str, days: int) -> InlineKeyboardMarkup:
         ],
     ])
 
+def private_lines_coin_kb(package_code: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="₿ Pay with BTC", callback_data=f"plcoin:btc:{package_code}")],
+        [InlineKeyboardButton(text="Ł Pay with LTC", callback_data=f"plcoin:ltc:{package_code}")],
+        [InlineKeyboardButton(text="Ξ Pay with ETH", callback_data=f"plcoin:eth:{package_code}")],
+        [InlineKeyboardButton(text="💵 Pay with USDT (TRC20)", callback_data=f"plcoin:usdttrc20:{package_code}")],
+        [
+            InlineKeyboardButton(text="🔙 Back", callback_data="cat:private_lines"),
+            InlineKeyboardButton(text="🏠 Home", callback_data="nav:home"),
+        ],
+    ])
+
+
 def category_menu_kb(cat_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔓 Access", callback_data=f"access:{cat_key}")],
@@ -246,7 +265,8 @@ async def plan_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text2 = (
-        f"✅ You selected **{days} days** for {CATEGORIES[cat_key]['title']}.\n\n"
+        f"ˇ| 🔴REC | You selected **{days} DAYS** for {CATEGORIES[cat_key]['title']}.\n\n"
+        "If you want to purchase with another coin, message @ispodradara106.\n\n"
         "Choose crypto to pay:"
     )
     await send_screen(c, text2, coin_choice_kb(cat_key, days))
@@ -254,21 +274,20 @@ async def plan_selected(c):
 
 @dp.callback_query(F.data.startswith("pl:"))
 async def private_lines_selected(c):
-    code = c.data.split(":", 1)[1]
+    package = c.data.split(":", 1)[1]
+    info = PRIVATE_LINE_PACKAGES.get(package)
 
-    mapping = {
-        "1k": "1k lines - $10",
-        "5k": "5k lines - $30",
-        "10k": "10k lines - $50",
-        "30k": "30k lines - $100",
-    }
-    picked = mapping.get(code, "Selected package")
+    if not info:
+        await c.answer("Unknown package.")
+        return
 
-    await send_notice(
-        c,
-        f"| 🔴REC | You have chosen: {picked}\n\n"
-        "🔗 tu ce biti link za kupnju."
+    await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
+
+    text = (
+        f"✅ You selected **{info['title']}** — **${info['price_usd']}**\n\n"
+        "Choose crypto to pay:"
     )
+    await send_screen(c, text, private_lines_coin_kb(package))
     await c.answer()
 
 @dp.callback_query(F.data == "nav:back")
@@ -413,3 +432,51 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
+@dp.callback_query(F.data.startswith("plcoin:"))
+async def pay_private_lines_nowpayments(c):
+    # plcoin:btc:1k
+    _, coin, package = c.data.split(":")
+    info = PRIVATE_LINE_PACKAGES.get(package)
+
+    if not info:
+        await c.answer("Unknown package.")
+        return
+
+    await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
+
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{BASE_URL}/pay/nowpayments/create",
+            params={
+                "user_id": c.from_user.id,
+                "package": package,
+                "pay_currency": coin,
+                "kind": "private_lines",
+            },
+        ) as r:
+            if r.status != 200:
+                txt = await r.text()
+                msg = await c.message.answer(f"❌ Payment error:\n{txt}", reply_markup=status_back_kb())
+                LAST_NOTICE[c.from_user.id] = msg.message_id
+                await c.answer()
+                return
+
+            data = await r.json()
+
+    invoice_url = data.get("invoice_url")
+    if not invoice_url:
+        msg = await c.message.answer("❌ Could not create invoice. Try again.", reply_markup=status_back_kb())
+        LAST_NOTICE[c.from_user.id] = msg.message_id
+        await c.answer()
+        return
+
+    msg = await c.message.answer(
+        f"💳 Pay here:\n{invoice_url}\n\n"
+        f"Package: {info['title']} — ${info['price_usd']}\n"
+        "✅ Delivery will be sent automatically after confirmation.",
+        reply_markup=status_back_kb()
+    )
+    LAST_NOTICE[c.from_user.id] = msg.message_id
+    await c.answer()

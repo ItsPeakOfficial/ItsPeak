@@ -65,7 +65,7 @@ def status_back_kb() -> InlineKeyboardMarkup:
 
 def category_menu_kb(cat_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔓 Pristup", callback_data=f"access:{cat_key}")],
+        [InlineKeyboardButton(text="🔓 Access", callback_data=f"access:{cat_key}")],
         [InlineKeyboardButton(text="💳 Kupi 30 dana (uskoro)", callback_data=f"buy:{cat_key}")],
         [
             InlineKeyboardButton(text="🔙 Back", callback_data="nav:back"),

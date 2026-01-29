@@ -149,6 +149,11 @@ def status_back_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🏠 Back to menu", callback_data="nav:home")],
     ])
 
+def admin_return_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Vrati se", callback_data="nav:home")]
+    ])
+
 def coin_choice_kb(cat_key: str, days: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="₿ Pay with BTC", callback_data=f"pay:btc:{cat_key}:{days}")],
@@ -533,7 +538,10 @@ async def grant_sub(m: Message):
     """
     if not is_admin(m.from_user.id):
         return
-
+    try:
+        await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
+    except Exception:
+        pass
     parts = m.text.split()
     if len(parts) != 4:
         return await m.answer(
@@ -566,13 +574,16 @@ async def grant_sub(m: Message):
 
     user_label = await format_user_identity(user_id)
 
-    await m.answer(
+    msg = await m.answer(
         f"✅ <b>Subscription granted</b>\n\n"
         f"👤 {user_label}\n"
         f"📦 {sub_type_label(sub_type)}\n"
         f"⏳ {days} days",
+        reply_markup=admin_return_kb(),
         parse_mode="HTML",
     )
+
+    LAST_NOTICE[m.from_user.id] = msg.message_id
 
 @dp.message(Command("ungrant_sub"))
 async def ungrant_sub(m: Message):
@@ -581,6 +592,11 @@ async def ungrant_sub(m: Message):
     """
     if not is_admin(m.from_user.id):
         return
+
+    try:
+        await bot.delete_message(chat_id=m.chat.id, message_id=m.message_id)
+    except Exception:
+        pass
 
     parts = m.text.split()
     if len(parts) != 2:
@@ -604,10 +620,13 @@ async def ungrant_sub(m: Message):
 
     user_label = await format_user_identity(user_id)
 
-    await m.answer(
+    msg = await m.answer(
         f"🗑️ <b>Subscription removed</b>\n\n👤 {user_label}",
+        reply_markup=admin_return_kb(),
         parse_mode="HTML",
     )
+
+    LAST_NOTICE[m.from_user.id] = msg.message_id
 
 @dp.callback_query(F.data == "admin:menu")
 async def admin_menu_cb(c):

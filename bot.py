@@ -427,7 +427,7 @@ async def pay_nowpayments(c):
         f"💳 Pay here:\n{invoice_url}\n\n"
         f"📦 Category: {cat_title}\n"
         f"⏱ Selected plan: {days} days\n\n"
-        "*Please complete payment in the next 20 minutes!* If something happens, message me at @ispodradara106.\n\n"
+        "*Please complete payment in the next 20 minutes!*\n If something happens, message me at @ispodradara106.\n\n"
         "✅ Access will be activated automatically after confirmation.",
         reply_markup=status_back_kb()
     )

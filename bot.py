@@ -554,17 +554,32 @@ async def admin_cmd(m: Message):
     if not is_admin(m.from_user.id):
         return await m.answer("⛔️ Nemaš pristup.")
     await m.answer(
-        "🛠️ <b>ItsPeak Admin tools</b> - managing everything - buys, subscriptions, ids.",
+        "🛠️ <b>ItsPeak Admin tools:</b> managing everything - buys, subscriptions, ids.",
         reply_markup=admin_menu_kb(),
         parse_mode="HTML",
     )
-    
+
 @dp.callback_query(F.data == "admin:menu")
 async def admin_menu_cb(c):
     if not is_admin(c.from_user.id):
         return await c.answer("No access", show_alert=True)
     await safe_edit_or_replace(c, "🛠️ Admin tools", admin_menu_kb())
     await c.answer()
+
+async def format_user_identity(user_id: int) -> str:
+    """
+    Vraća lijep prikaz usera za admin panel:
+    - Ime + @username ako postoji
+    - fallback na user_id ako ne možemo dohvatiti
+    """
+    try:
+        chat = await bot.get_chat(user_id)
+        name = chat.full_name or str(user_id)
+        if chat.username:
+            return f"{name} (@{chat.username})"
+        return name
+    except Exception:
+        return str(user_id)
 
 @dp.callback_query(F.data.startswith("admin:subs:"))
 async def admin_subs_list(c):
@@ -592,9 +607,11 @@ async def admin_subs_list(c):
             exp = r["expires_at"]
             st = sub_type_label(r.get("sub_type", ""))
 
+            user_label = await format_user_identity(uid)
             badge = "🟢 ACTIVE" if exp > now else "🔴 EXPIRED"
+
             text_lines.append(
-                f"{badge} <b>{uid}</b> — {st}\n"
+                f"{badge} <b>{user_label}</b> — {st}\n"
                 f"⏳ expires: <code>{fmt_ts(exp)}</code>"
             )
 

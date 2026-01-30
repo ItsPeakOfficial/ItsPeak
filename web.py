@@ -14,7 +14,11 @@ load_dotenv()
 
 app = FastAPI()
 
-DRIVE_LINK = "https://drive.google.com/"  # <-- stavi svoj pravi link
+DRIVE_LINKS = {
+    "mail_combo": "PASTE_MAIL_COMBO_DRIVE_LINK",
+    "url_cloud": "PASTE_URL_CLOUD_DRIVE_LINK",
+    "injectables": "PASTE_INJECTABLES_DRIVE_LINK",
+}
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY")
 NOWPAYMENTS_IPN_SECRET = os.getenv("NOWPAYMENTS_IPN_SECRET")
@@ -77,6 +81,9 @@ async def access(token: str, cat: str):
 
     if sub_exp < now:
         raise HTTPException(status_code=403, detail="No active access")
+    drive_link = DRIVE_LINKS.get(cat)
+    if not drive_link:
+        raise HTTPException(status_code=400, detail="Unknown category")
 
     html = f"""
     <html>
@@ -84,7 +91,7 @@ async def access(token: str, cat: str):
       <body style="font-family: Arial; max-width: 700px; margin: 40px auto;">
         <h2>✅ Pristup odobren</h2>
         <p>Tvoj pristup vrijedi do: <b>{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(sub_exp))}</b></p>
-        <p><a href="{DRIVE_LINK}" target="_blank">➡️ Otvori cloud (Google Drive)</a></p>
+        <p><a href="{drive_link}" target="_blank">➡️ Otvori cloud (Google Drive)</a></p>
         <hr />
         <p style="color: #666;">Ova stranica provjerava token i pretplatu (SQLite).</p>
       </body>

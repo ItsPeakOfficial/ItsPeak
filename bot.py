@@ -526,8 +526,8 @@ async def access_callback(c):
 
     # ✅ pošalji cloud info + gumb za zatvaranje
     await c.message.answer(
-        f"✅ Pristup odobren za: {CATEGORIES[cat_key]['title']}\n\n"
-        f"Privremeni link (10 min):\n{link}",
+        f"{CATEGORIES[cat_key]['title']}\n\n"
+        f"Get your link to cloud:\n{link}",
         reply_markup=close_cloud_info_kb(),
         disable_web_page_preview=True
     )

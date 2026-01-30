@@ -22,6 +22,11 @@ async def init_db():
     if DATABASE_URL:
         pool = await _pg()
         async with pool.acquire() as conn:
+
+            # 1) ako postoji stara subscriptions tablica (1 row po useru), migriraj je
+            await migrate_subscriptions_to_multi()
+
+            # 2) osiguraj da nova schema postoji
             await conn.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (
                 id BIGSERIAL PRIMARY KEY,
@@ -33,21 +38,6 @@ async def init_db():
                 UNIQUE (user_id, sub_type)
             );
             """)
-            # ako ti je već kreirana stara tablica bez sub_type
-            try:
-                await conn.execute("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS sub_type TEXT NOT NULL DEFAULT '';")
-            except Exception:
-                pass
-
-            try:
-                await conn.execute("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS plan_days BIGINT NOT NULL DEFAULT 0;")
-            except Exception:
-                pass
-
-            try:
-                await conn.execute("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS starts_at BIGINT NOT NULL DEFAULT 0;")
-            except Exception:
-                pass
 
             await conn.execute("""
             CREATE TABLE IF NOT EXISTS access_tokens (
@@ -327,6 +317,62 @@ async def get_subscription_info(user_id: int):
                 "plan_days": int(row[2] or 0),
                 "starts_at": int(row[3] or 0),
             }
+
+async def get_user_subscriptions(user_id: int, active_only: bool = True):
+    now = int(time.time())
+
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            if active_only:
+                rows = await conn.fetch(
+                    "SELECT user_id, expires_at, sub_type, plan_days, starts_at "
+                    "FROM subscriptions WHERE user_id=$1 AND expires_at > $2 "
+                    "ORDER BY expires_at DESC",
+                    user_id, now
+                )
+            else:
+                rows = await conn.fetch(
+                    "SELECT user_id, expires_at, sub_type, plan_days, starts_at "
+                    "FROM subscriptions WHERE user_id=$1 "
+                    "ORDER BY expires_at DESC",
+                    user_id
+                )
+
+            return [{
+                "user_id": int(r["user_id"]),
+                "expires_at": int(r["expires_at"]),
+                "sub_type": r["sub_type"] or "",
+                "plan_days": int(r["plan_days"] or 0),
+                "starts_at": int(r["starts_at"] or 0),
+            } for r in rows]
+
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            if active_only:
+                cur = await db.execute(
+                    "SELECT user_id, expires_at, sub_type, plan_days, starts_at "
+                    "FROM subscriptions WHERE user_id=? AND expires_at > ? "
+                    "ORDER BY expires_at DESC",
+                    (user_id, now),
+                )
+            else:
+                cur = await db.execute(
+                    "SELECT user_id, expires_at, sub_type, plan_days, starts_at "
+                    "FROM subscriptions WHERE user_id=? "
+                    "ORDER BY expires_at DESC",
+                    (user_id,),
+                )
+
+            rows = await cur.fetchall()
+            return [{
+                "user_id": int(r[0]),
+                "expires_at": int(r[1]),
+                "sub_type": r[2] or "",
+                "plan_days": int(r[3] or 0),
+                "starts_at": int(r[4] or 0),
+            } for r in rows]
 
 # ---------- TOKENS ----------
 async def create_token(user_id: int, ttl_seconds: int = 600) -> str:

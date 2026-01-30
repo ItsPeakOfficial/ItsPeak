@@ -310,7 +310,6 @@ async def nav_home(c):
 async def my_subscription(c):
     user_id = c.from_user.id
     subs = await db.get_user_subscriptions(user_id, active_only=True)
-    now = int(time.time())
 
     if not subs:
         text = (
@@ -889,12 +888,15 @@ async def admin_ungrant_do(c):
     if not is_admin(c.from_user.id):
         return await c.answer("No access", show_alert=True)
 
-    # admin:ungrant:<uid>:<back_page>
-    _, _, uid_str, back_page_str = c.data.split(":")
+    # admin:ungrant:<uid>:<sub_type|ALL>:<back_page>
+    _, _, uid_str, sub_type, back_page_str = c.data.split(":")
     uid = int(uid_str)
     back_page = max(1, int(back_page_str))
 
-    await db.set_subscription(uid, 0, sub_type="", plan_days=0, starts_at=0)
+    if sub_type == "ALL":
+        await db.revoke_subscription(uid, None)
+    else:
+        await db.revoke_subscription(uid, sub_type)
 
     # refresh isti user screen
     c.data = f"admin:grantuser:{uid}:{back_page}"

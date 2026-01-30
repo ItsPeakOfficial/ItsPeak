@@ -543,6 +543,7 @@ def is_admin(user_id: int) -> bool:
 
 def admin_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎁 Grant access", callback_data="admin:grant:1")],
         [InlineKeyboardButton(text="🟢 Active subscriptions", callback_data="admin:subs:1")],
         [InlineKeyboardButton(text="🔴 Expired / revoked", callback_data="admin:expired:1")],
         [InlineKeyboardButton(text="📈 Priv Lines (last buys)", callback_data="admin:pl:1")],
@@ -560,6 +561,58 @@ def admin_pager_kb(prefix: str, page: int, has_prev: bool, has_next: bool) -> In
     return InlineKeyboardMarkup(inline_keyboard=[
         row,
         [InlineKeyboardButton(text="🔙 Admin menu", callback_data="admin:menu")],
+    ])
+
+def admin_grant_list_kb(rows: list[dict], page: int, has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
+    kb_rows = []
+
+    # svaki user kao button
+    for r in rows:
+        uid = int(r["user_id"])
+        label = f"{(r.get('first_name') or '').strip()} {(r.get('last_name') or '').strip()}".strip()
+        if not label:
+            label = "NoName"
+        uname = (r.get("username") or "").strip()
+        if uname:
+            label = f"{label} (@{uname})"
+        else:
+            label = f"{label} ({uid})"
+
+        kb_rows.append([InlineKeyboardButton(text=label[:60], callback_data=f"admin:grantuser:{uid}:{page}")])
+
+    # pager
+    nav = []
+    if has_prev:
+        nav.append(InlineKeyboardButton(text="⬅️ Prev", callback_data=f"admin:grant:{page-1}"))
+    nav.append(InlineKeyboardButton(text="🔄 Refresh", callback_data=f"admin:grant:{page}"))
+    if has_next:
+        nav.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"admin:grant:{page+1}"))
+    kb_rows.append(nav)
+
+    kb_rows.append([InlineKeyboardButton(text="🔙 Admin menu", callback_data="admin:menu")])
+
+    return InlineKeyboardMarkup(inline_keyboard=kb_rows)
+
+
+def admin_grant_user_kb(uid: int, back_page: int) -> InlineKeyboardMarkup:
+    # quick grant planovi
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📩 Cloud — 10d", callback_data=f"admin:grantdo:{uid}:mail_combo:10:{back_page}"),
+         InlineKeyboardButton(text="📩 Cloud — 30d", callback_data=f"admin:grantdo:{uid}:mail_combo:30:{back_page}"),
+         InlineKeyboardButton(text="📩 Cloud — 90d", callback_data=f"admin:grantdo:{uid}:mail_combo:90:{back_page}")],
+
+        [InlineKeyboardButton(text="🔗 URL — 10d", callback_data=f"admin:grantdo:{uid}:url_cloud:10:{back_page}"),
+         InlineKeyboardButton(text="🔗 URL — 30d", callback_data=f"admin:grantdo:{uid}:url_cloud:30:{back_page}"),
+         InlineKeyboardButton(text="🔗 URL — 90d", callback_data=f"admin:grantdo:{uid}:url_cloud:90:{back_page}")],
+
+        [InlineKeyboardButton(text="🧪 Injections — 10d", callback_data=f"admin:grantdo:{uid}:injectables:10:{back_page}"),
+         InlineKeyboardButton(text="🧪 Injections — 30d", callback_data=f"admin:grantdo:{uid}:injectables:30:{back_page}"),
+         InlineKeyboardButton(text="🧪 Injections — 90d", callback_data=f"admin:grantdo:{uid}:injectables:90:{back_page}")],
+
+        [InlineKeyboardButton(text="🗑️ UNGRANT (revoke)", callback_data=f"admin:ungrant:{uid}:{back_page}")],
+
+        [InlineKeyboardButton(text="⬅️ Back to users", callback_data=f"admin:grant:{back_page}"),
+         InlineKeyboardButton(text="🏠 Home", callback_data="nav:home")],
     ])
 
 def fmt_remaining(exp: int) -> str:
@@ -733,6 +786,110 @@ async def format_user_identity(user_id: int) -> str:
         return name
     except Exception:
         return str(user_id)
+
+@dp.callback_query(F.data.startswith("admin:grant:"))
+async def admin_grant_panel(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+
+    page = int(c.data.split(":")[-1])
+    page = max(1, page)
+
+    offset = (page - 1) * ADMIN_PAGE_SIZE
+    rows, total = await db.get_users_page(limit=ADMIN_PAGE_SIZE, offset=offset)
+
+    pages = (total + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE if total else 1
+    has_prev = page > 1
+    has_next = page < pages
+
+    text = (
+        f"🎁 <b>Grant access</b>\n"
+        f"Select user (page {page}/{pages})."
+    )
+
+    kb = admin_grant_list_kb(rows, page, has_prev, has_next)
+    await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
+    await c.answer()
+
+@dp.callback_query(F.data.startswith("admin:grantuser:"))
+async def admin_grant_user_screen(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+
+    # admin:grantuser:<uid>:<back_page>
+    _, _, uid_str, back_page_str = c.data.split(":")
+    uid = int(uid_str)
+    back_page = max(1, int(back_page_str))
+
+    user_label = await format_user_identity(uid)
+    info = await db.get_subscription_info(uid)
+    now = int(time.time())
+
+    if not info or info["expires_at"] <= now:
+        sub_line = "❌ <b>No active subscription</b>"
+    else:
+        sub_line = (
+            f"✅ <b>Active</b>\n"
+            f"📦 Type: <b>{sub_type_label(info.get('sub_type',''))}</b>\n"
+            f"🧾 Plan: <b>{int(info.get('plan_days') or 0)} days</b>\n"
+            f"⏳ Expires: <code>{fmt_ts(int(info['expires_at']))}</code>\n"
+            f"🕒 Remaining: <b>{fmt_remaining(int(info['expires_at']))}</b>"
+        )
+
+    text = (
+        "🎁 <b>Grant access</b>\n\n"
+        f"👤 <b>{user_label}</b>\n\n"
+        f"{sub_line}\n\n"
+        "Choose what to grant:"
+    )
+
+    kb = admin_grant_user_kb(uid, back_page)
+    await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
+    await c.answer()
+
+
+@dp.callback_query(F.data.startswith("admin:grantdo:"))
+async def admin_grant_do(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+
+    # admin:grantdo:<uid>:<sub_type>:<days>:<back_page>
+    _, _, uid_str, sub_type, days_str, back_page_str = c.data.split(":")
+    uid = int(uid_str)
+    days = int(days_str)
+    back_page = max(1, int(back_page_str))
+
+    now_ts = int(time.time())
+    expires_at = now_ts + days * 86400
+
+    await db.set_subscription(
+        uid,
+        expires_at,
+        sub_type=sub_type,
+        plan_days=days,
+        starts_at=now_ts,
+    )
+
+    # refresh isti user screen
+    c.data = f"admin:grantuser:{uid}:{back_page}"
+    return await admin_grant_user_screen(c)
+
+
+@dp.callback_query(F.data.startswith("admin:ungrant:"))
+async def admin_ungrant_do(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+
+    # admin:ungrant:<uid>:<back_page>
+    _, _, uid_str, back_page_str = c.data.split(":")
+    uid = int(uid_str)
+    back_page = max(1, int(back_page_str))
+
+    await db.set_subscription(uid, 0, sub_type="", plan_days=0, starts_at=0)
+
+    # refresh isti user screen
+    c.data = f"admin:grantuser:{uid}:{back_page}"
+    return await admin_grant_user_screen(c)
 
 @dp.callback_query(F.data.startswith("admin:subs:"))
 async def admin_subs_list(c):

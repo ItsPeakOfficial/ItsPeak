@@ -816,16 +816,7 @@ async def admin_grant_panel(c):
     await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
     await c.answer()
 
-@dp.callback_query(F.data.startswith("admin:grantuser:"))
-async def admin_grant_user_screen(c):
-    if not is_admin(c.from_user.id):
-        return await c.answer("No access", show_alert=True)
-
-    # admin:grantuser:<uid>:<back_page>
-    _, _, uid_str, back_page_str = c.data.split(":")
-    uid = int(uid_str)
-    back_page = max(1, int(back_page_str))
-
+async def show_grant_user_screen(c, uid: int, back_page: int):
     user_label = await format_user_identity(uid)
     subs = await db.get_user_subscriptions(uid, active_only=True)
     now = int(time.time())
@@ -853,6 +844,18 @@ async def admin_grant_user_screen(c):
 
     kb = admin_grant_user_kb(uid, back_page)
     await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
+
+@dp.callback_query(F.data.startswith("admin:grantuser:"))
+async def admin_grant_user_screen(c):
+    if not is_admin(c.from_user.id):
+        return await c.answer("No access", show_alert=True)
+
+    # admin:grantuser:<uid>:<back_page>
+    _, _, uid_str, back_page_str = c.data.split(":")
+    uid = int(uid_str)
+    back_page = max(1, int(back_page_str))
+
+    await show_grant_user_screen(c, uid, back_page)
     await c.answer()
 
 
@@ -878,9 +881,8 @@ async def admin_grant_do(c):
         starts_at=now_ts,
     )
 
-    # refresh isti user screen
-    c.data = f"admin:grantuser:{uid}:{back_page}"
-    return await admin_grant_user_screen(c)
+    await show_grant_user_screen(c, uid, back_page)
+    await c.answer("Granted ✅")
 
 
 @dp.callback_query(F.data.startswith("admin:ungrant:"))
@@ -898,9 +900,8 @@ async def admin_ungrant_do(c):
     else:
         await db.revoke_subscription(uid, sub_type)
 
-    # refresh isti user screen
-    c.data = f"admin:grantuser:{uid}:{back_page}"
-    return await admin_grant_user_screen(c)
+    await show_grant_user_screen(c, uid, back_page)
+    await c.answer("Revoked 🗑️")
 
 @dp.callback_query(F.data.startswith("admin:subs:"))
 async def admin_subs_list(c):

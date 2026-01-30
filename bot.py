@@ -124,9 +124,12 @@ async def go_home_clean(c):
 
     # pošalji novi home screen
     text = "🏠 Main menu\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
-    kb = main_menu_kb()
+
+    user_id = c.from_user.id
+    kb = main_menu_kb_admin() if is_admin(user_id) else main_menu_kb()
+
     msg = await c.message.answer(text, reply_markup=kb)
-    LAST_SCREEN[c.from_user.id] = msg.message_id
+    LAST_SCREEN[user_id] = msg.message_id
 
     # obriši poruku s koje je user kliknuo (invoice/status/grant itd.)
     try:
@@ -145,17 +148,27 @@ def main_menu_kb() -> InlineKeyboardMarkup:
             )
         ],
         [
-            InlineKeyboardButton(text="📩 Combo Mail Cloud 📩", callback_data="cat:mail_combo"),
-            InlineKeyboardButton(text="🔐 1:1 Full Private Lines 🔐", callback_data="cat:private_lines"),
+            InlineKeyboardButton(text="Combo Mail Cloud", callback_data="cat:mail_combo"),
+            InlineKeyboardButton(text="Full Private Lines", callback_data="cat:private_lines"),
         ],
         [
-            InlineKeyboardButton(text="🔗 Private URL Lines 🔗", callback_data="cat:url_cloud"),
-            InlineKeyboardButton(text="🧪 Valid Injectable Lines 🧪", callback_data="cat:injectables"),
+            InlineKeyboardButton(text="Private URL Lines", callback_data="cat:url_cloud"),
+            InlineKeyboardButton(text="Valid Injectable", callback_data="cat:injectables"),
         ],
         [
             InlineKeyboardButton(text="⭐ My subscription", callback_data="me:sub"),
         ],
     ])
+
+def main_menu_kb_admin() -> InlineKeyboardMarkup:
+    kb = main_menu_kb()
+
+    # dodaj admin panel gumb skroz dolje
+    kb.inline_keyboard.append(
+        [InlineKeyboardButton(text="🛠 Admin panel", callback_data="admin:menu")]
+    )
+
+    return kb
 
 def status_back_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[

@@ -100,7 +100,7 @@ async def access(token: str, cat: str):
                 margin: 0;
                 padding: 0;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                background-image: url("https://i.postimg.cc/4dtHRnr1/Chat-GPT-Image-30-sij-2026-07-49-34.png");
+                background-image: url("https://i.postimg.cc/Vvv6L6hR/Chat-GPT-Image-30-sij-2026-08-01-12.png");
                 min-height: 100vh;
                 background-size: cover;          /* full screen */
                 background-position: center;     /* centrirano */

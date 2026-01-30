@@ -86,6 +86,8 @@ async def access(token: str, cat: str):
     if not drive_link:
         raise HTTPException(status_code=400, detail="Unknown category")
 
+    token_exp = int(data["expires_at"])  # token expiry (10 min)
+
     html = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -109,8 +111,8 @@ async def access(token: str, cat: str):
                 background: #ffffff;
                 border-radius: 18px;
                 padding: 32px 36px;
-                max-width: 520px;
-                width: 100%;
+                max-width: 540px;
+                width: calc(100% - 32px);
                 box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
                 text-align: center;
             }}
@@ -122,7 +124,7 @@ async def access(token: str, cat: str):
                 background: #eef2ff;
                 color: #3730a3;
                 font-size: 14px;
-                font-weight: 600;
+                font-weight: 700;
                 margin-bottom: 16px;
             }}
 
@@ -131,10 +133,29 @@ async def access(token: str, cat: str):
                 color: #111827;
             }}
 
-            .expires {{
+            .sub {{
                 color: #374151;
                 font-size: 15px;
-                margin-bottom: 26px;
+                margin: 0 0 10px 0;
+            }}
+
+            .countdown {{
+                margin: 14px auto 22px;
+                display: inline-block;
+                padding: 10px 14px;
+                border-radius: 12px;
+                background: #f3f4f6;
+                color: #111827;
+                font-size: 14px;
+                font-weight: 700;
+            }}
+
+            .countdown small {{
+                display: block;
+                margin-top: 2px;
+                font-weight: 600;
+                color: #6b7280;
+                font-size: 12px;
             }}
 
             .button {{
@@ -145,7 +166,7 @@ async def access(token: str, cat: str):
                 text-decoration: none;
                 border-radius: 999px;
                 font-size: 17px;
-                font-weight: 700;
+                font-weight: 800;
                 transition: transform 0.15s ease, box-shadow 0.15s ease;
                 box-shadow: 0 10px 25px rgba(26, 115, 232, 0.45);
             }}
@@ -155,34 +176,86 @@ async def access(token: str, cat: str):
                 box-shadow: 0 14px 32px rgba(26, 115, 232, 0.6);
             }}
 
-            .footer {{
-                margin-top: 28px;
+            .muted {{
+                margin-top: 20px;
                 font-size: 13px;
                 color: #6b7280;
+                line-height: 1.35;
+            }}
+
+            .expired {{
+                margin-top: 18px;
+                padding: 12px 14px;
+                border-radius: 12px;
+                background: #fee2e2;
+                color: #991b1b;
+                font-size: 14px;
+                font-weight: 800;
+                display: none;
             }}
         </style>
     </head>
     <body>
         <div class="card">
-            <div class="badge">
-                🔐 {cat}
-            </div>
+            <div class="badge">🔐 Category: {cat}</div>
 
-            <h2>✅ Pristup odobren</h2>
+            <h2>✅ Access granted</h2>
 
-            <div class="expires">
-                Tvoj pristup vrijedi do:<br>
+            <p class="sub">
+                Subscription active until:<br>
                 <b>{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(sub_exp))}</b>
+            </p>
+
+            <div class="countdown">
+                ⏳ Link expires in: <span id="timer">--:--</span>
+                <small>This is a temporary access link.</small>
             </div>
 
-            <a href="{drive_link}" target="_blank" class="button">
+            <a href="{drive_link}" target="_blank" class="button" id="openBtn">
                 🔗 Open Cloud
             </a>
 
-            <div class="footer">
-                Secure access · Limited time link
+            <div class="expired" id="expiredBox">
+                ⚠️ This access link has expired. Please generate a new one from the bot.
+            </div>
+
+            <div class="muted">
+                Secure access · Temporary link · Do not share
             </div>
         </div>
+
+        <script>
+            // Countdown to token expiry (server provides UNIX timestamp)
+            const tokenExp = {token_exp} * 1000;
+            const timerEl = document.getElementById("timer");
+            const expiredBox = document.getElementById("expiredBox");
+            const openBtn = document.getElementById("openBtn");
+
+            function pad(n) {{
+                return String(n).padStart(2, "0");
+            }}
+
+            function tick() {{
+                const now = Date.now();
+                let diff = Math.floor((tokenExp - now) / 1000);
+
+                if (diff <= 0) {{
+                    timerEl.textContent = "00:00";
+                    expiredBox.style.display = "block";
+                    openBtn.style.pointerEvents = "none";
+                    openBtn.style.opacity = "0.5";
+                    openBtn.textContent = "🔒 Link Expired";
+                    return;
+                }}
+
+                const m = Math.floor(diff / 60);
+                const s = diff % 60;
+                timerEl.textContent = `${{pad(m)}}:${{pad(s)}}`;
+            }}
+
+            tick();
+            setInterval(tick, 1000);
+        </script>
     </body>
     </html>
     """

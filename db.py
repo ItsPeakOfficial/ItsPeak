@@ -37,6 +37,13 @@ async def init_db():
                 starts_at BIGINT NOT NULL DEFAULT 0,
                 UNIQUE (user_id, sub_type)
             );
+            
+            """)
+
+            # --- add revoked_at (optional) ---
+            await conn.execute("""
+            ALTER TABLE subscriptions
+            ADD COLUMN IF NOT EXISTS revoked_at BIGINT NOT NULL DEFAULT 0;
             """)
 
             await conn.execute("""
@@ -82,6 +89,14 @@ async def init_db():
                 UNIQUE(user_id, sub_type)
             );
             """)
+
+            # --- add revoked_at (optional) ---
+            try:
+                await db.execute("ALTER TABLE subscriptions ADD COLUMN revoked_at INTEGER NOT NULL DEFAULT 0;")
+            except Exception:
+                pass
+
+
             # ako je već postojala stara tablica bez sub_type
             try:
                 await db.execute("ALTER TABLE subscriptions ADD COLUMN sub_type TEXT NOT NULL DEFAULT '';")
@@ -510,20 +525,33 @@ async def cleanup_expired_tokens():
             await db.commit()
 
 async def revoke_subscription(user_id: int, sub_type: str | None = None):
+    # umjesto brisanja, samo označi kao expired/revoked
     if DATABASE_URL:
         pool = await _pg()
         async with pool.acquire() as conn:
             if sub_type is None:
-                await conn.execute("DELETE FROM subscriptions WHERE user_id=$1", user_id)
+                await conn.execute(
+                    "UPDATE subscriptions SET expires_at=0 WHERE user_id=$1",
+                    user_id
+                )
             else:
-                await conn.execute("DELETE FROM subscriptions WHERE user_id=$1 AND sub_type=$2", user_id, sub_type)
+                await conn.execute(
+                    "UPDATE subscriptions SET expires_at=0 WHERE user_id=$1 AND sub_type=$2",
+                    user_id, sub_type
+                )
     else:
         import aiosqlite
         async with aiosqlite.connect(SQLITE_PATH) as db:
             if sub_type is None:
-                await db.execute("DELETE FROM subscriptions WHERE user_id=?", (user_id,))
+                await db.execute(
+                    "UPDATE subscriptions SET expires_at=0 WHERE user_id=?",
+                    (user_id,)
+                )
             else:
-                await db.execute("DELETE FROM subscriptions WHERE user_id=? AND sub_type=?", (user_id, sub_type))
+                await db.execute(
+                    "UPDATE subscriptions SET expires_at=0 WHERE user_id=? AND sub_type=?",
+                    (user_id, sub_type)
+                )
             await db.commit()
 # ---------- ADMIN QUERIES ----------
 async def get_subscriptions_page(limit: int = 10, offset: int = 0):

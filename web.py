@@ -18,6 +18,31 @@ DRIVE_LINK = "https://drive.google.com/"  # <-- stavi svoj pravi link
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY")
 NOWPAYMENTS_IPN_SECRET = os.getenv("NOWPAYMENTS_IPN_SECRET")
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # isti token kao u bot.py
+
+async def tg_send_message(chat_id: int, text: str):
+    """
+    Pošalje Telegram poruku useru direktno preko Bot API.
+    """
+    if not BOT_TOKEN:
+        print("BOT_TOKEN missing - cannot send Telegram message")
+        return
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(url, json=payload)
+        if r.status_code != 200:
+            print("Telegram sendMessage failed:", r.status_code, r.text)
+    except Exception as e:
+        print("Telegram sendMessage exception:", repr(e))
 
 
 @app.on_event("startup")
@@ -186,6 +211,15 @@ async def nowpayments_webhook(request: Request):
             starts_at=now_ts,
         )
 
+        # ✅ notify user
+        await tg_send_message(
+            user_id,
+            "✅ <b>Payment confirmed!</b>\n\n"
+            f"📦 Subscription: <b>{cat_key}</b>\n"
+            f"🗓️ Plan: <b>{days} days</b>\n"
+            "🔁 You can now go back to the bot menu and use <b>Access</b>."
+        )
+
         return {"status": "ok", "kind": "sub", "cat_key": cat_key, "days": days}
 
     if kind == "pl":
@@ -201,6 +235,15 @@ async def nowpayments_webhook(request: Request):
                 lines_count=lines_map[package],
                 price_usd=price_map_private[package],
                 created_at=int(time.time()),
+            )
+
+            # ✅ notify user
+            await tg_send_message(
+                user_id,
+                "✅ <b>Payment confirmed!</b>\n\n"
+                f"🔐 Private lines package: <b>{package}</b>\n"
+                f"📦 Lines: <b>{lines_map[package]}</b>\n"
+                "📩 You will receive delivery / instructions soon."
             )
 
         return {"status": "ok", "kind": "pl", "package": package}

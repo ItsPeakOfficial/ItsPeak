@@ -126,9 +126,13 @@ async def go_home_clean(c):
     text = "🏠 Main menu\n\nIf you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
 
     user_id = c.from_user.id
-    kb = main_menu_kb_admin() if is_admin(user_id) else main_menu_kb()
+    kb = await build_main_menu_kb(user_id)
 
-    msg = await c.message.answer(text, reply_markup=kb)
+    msg = await c.message.answer(
+        text,
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
     LAST_SCREEN[user_id] = msg.message_id
 
     # obriši poruku s koje je user kliknuo (invoice/status/grant itd.)
@@ -138,6 +142,21 @@ async def go_home_clean(c):
         pass
 
     await c.answer()
+
+async def build_main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
+    subs = await db.get_user_subscriptions(user_id, active_only=True)
+    has_access = any(s["sub_type"] in {"mail_combo", "url_cloud", "injectables"} for s in subs)
+
+    kb = main_menu_kb_admin() if is_admin(user_id) else main_menu_kb()
+
+    if has_access:
+        # ubaci Access gumb PRIJE "My subscription"
+        kb.inline_keyboard.insert(
+            -1,
+            [InlineKeyboardButton(text="🔓 Access", callback_data="nav:access")]
+        )
+
+    return kb
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -159,6 +178,30 @@ def main_menu_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="⭐ My subscription", callback_data="me:sub"),
         ],
     ])
+
+def access_menu_kb(sub_types: set[str]) -> InlineKeyboardMarkup:
+    rows = []
+
+    if "mail_combo" in sub_types:
+        rows.append([
+            InlineKeyboardButton(text="📩 Mail Combo Cloud", callback_data="access:mail_combo")
+        ])
+
+    if "url_cloud" in sub_types:
+        rows.append([
+            InlineKeyboardButton(text="🔗 URL Cloud", callback_data="access:url_cloud")
+        ])
+
+    if "injectables" in sub_types:
+        rows.append([
+            InlineKeyboardButton(text="🧪 Injectables Cloud", callback_data="access:injectables")
+        ])
+
+    rows.append([
+        InlineKeyboardButton(text="🏠 Back to menu", callback_data="nav:home")
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def main_menu_kb_admin() -> InlineKeyboardMarkup:
     kb = main_menu_kb()
@@ -305,9 +348,13 @@ async def start(m: Message):
         "⬇️ Choose the service you need down below:"
     )
     user_id = m.from_user.id
-    kb = main_menu_kb_admin() if is_admin(user_id) else main_menu_kb()
+    kb = await build_main_menu_kb(user_id)
 
-    msg = await m.answer(text, reply_markup=kb)
+    msg = await m.answer(
+        text,
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
 
     # 4) zapamti da je to zadnji screen
     LAST_SCREEN[m.from_user.id] = msg.message_id
@@ -333,6 +380,26 @@ async def open_category(c):
 @dp.callback_query(F.data == "nav:home")
 async def nav_home(c):
     await go_home_clean(c)
+
+@dp.callback_query(F.data == "nav:access")
+async def open_access_menu(c):
+    user_id = c.from_user.id
+
+    subs = await db.get_user_subscriptions(user_id, active_only=True)
+    if not subs:
+        await c.answer("No active access", show_alert=True)
+        return
+
+    sub_types = {s["sub_type"] for s in subs}
+
+    text = (
+        "🔓 <b>Access panel</b>\n\n"
+        "Choose the cloud you want to access:"
+    )
+
+    kb = access_menu_kb(sub_types)
+    await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
+    await c.answer()
 
 @dp.callback_query(F.data == "me:sub")
 async def my_subscription(c):

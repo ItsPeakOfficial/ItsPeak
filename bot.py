@@ -138,11 +138,23 @@ async def go_home_clean(c):
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📩 Combo Mail Cloud 📩", callback_data="cat:mail_combo")],
-        [InlineKeyboardButton(text="🔐 1:1 Full Private Lines 🔐", callback_data="cat:private_lines")],
-        [InlineKeyboardButton(text="🔗 Private URL Lines 🔗", callback_data="cat:url_cloud")],
-        [InlineKeyboardButton(text="🧪 Valid Injectable Lines🧪", callback_data="cat:injectables")],
-        [InlineKeyboardButton(text="⭐ My subscription", callback_data="me:sub")],
+        [
+            InlineKeyboardButton(
+                text="📞 Contact ItsPeak",
+                url="https://t.me/ispodradara106"
+            )
+        ],
+        [
+            InlineKeyboardButton(text="📩 Combo Mail Cloud 📩", callback_data="cat:mail_combo"),
+            InlineKeyboardButton(text="🔐 1:1 Full Private Lines 🔐", callback_data="cat:private_lines"),
+        ],
+        [
+            InlineKeyboardButton(text="🔗 Private URL Lines 🔗", callback_data="cat:url_cloud"),
+            InlineKeyboardButton(text="🧪 Valid Injectable Lines 🧪", callback_data="cat:injectables"),
+        ],
+        [
+            InlineKeyboardButton(text="⭐ My subscription", callback_data="me:sub"),
+        ],
     ])
 
 def status_back_kb() -> InlineKeyboardMarkup:

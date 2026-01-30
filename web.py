@@ -15,8 +15,8 @@ load_dotenv()
 app = FastAPI()
 
 DRIVE_LINKS = {
-    "mail_combo": "https://drive.google.com/drive/folders/XXXXX_MAIL",
-    "url_cloud": "https://drive.google.com/drive/folders/XXXXX_URL",
+    "mail_combo": "https://mega.nz/folder/HhAFVBJb#aXdTKq8un6bzG-xaD0EZQw",
+    "url_cloud": "https://mega.nz/folder/b4ICTCbJ#y1DDg_pCZe23c6clV_Jviw",
     "injectables": "https://mega.nz/folder/no4CDKzC#ulHfTi9G3khXSmndbVT6qA",
 }
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
@@ -242,7 +242,7 @@ async def access(token: str, cat: str):
             }}
 
             function formatDHMS(totalSeconds) {{
-                // returns "Xd Yh Zm" (or "Ym Zs" if short)
+                // Always show seconds.
                 let s = Math.max(0, totalSeconds);
 
                 const days = Math.floor(s / 86400);
@@ -252,7 +252,7 @@ async def access(token: str, cat: str):
                 const mins = Math.floor(s / 60);
                 const secs = s % 60;
 
-                if (days > 0) return `${{days}}d ${{hours}}h ${{mins}}m`;
+                if (days > 0) return `${{days}}d ${{hours}}h ${{mins}}m ${{secs}}s`;
                 if (hours > 0) return `${{hours}}h ${{mins}}m ${{secs}}s`;
                 if (mins > 0) return `${{mins}}m ${{secs}}s`;
                 return `${{secs}}s`;

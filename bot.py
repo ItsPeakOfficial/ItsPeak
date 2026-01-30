@@ -974,9 +974,18 @@ async def admin_expired_list(c):
 
             user_label = await format_user_identity(uid)
 
+            revoked_at = int(r.get("revoked_at") or 0)
+
+            if revoked_at > 0:
+                status = "🗑️ <b>REVOKED</b>"
+                when = fmt_ts(revoked_at)
+            else:
+                status = "⌛ <b>EXPIRED</b>"
+                when = fmt_ts(exp)
+
             text_lines.append(
                 f"🔴 <b>{user_label}</b> — {st}\n"
-                f"⏳ expired: <code>{fmt_ts(exp)}</code>"
+                f"{status}: <code>{when}</code>"
             )
 
     text = "\n\n".join(text_lines)

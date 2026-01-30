@@ -525,32 +525,34 @@ async def cleanup_expired_tokens():
             await db.commit()
 
 async def revoke_subscription(user_id: int, sub_type: str | None = None):
-    # umjesto brisanja, samo označi kao expired/revoked
+    # ne briši red, nego ga označi kao revoked
+    now = int(time.time())
+
     if DATABASE_URL:
         pool = await _pg()
         async with pool.acquire() as conn:
             if sub_type is None:
                 await conn.execute(
-                    "UPDATE subscriptions SET expires_at=0 WHERE user_id=$1",
-                    user_id
+                    "UPDATE subscriptions SET expires_at=0, revoked_at=$2 WHERE user_id=$1",
+                    user_id, now
                 )
             else:
                 await conn.execute(
-                    "UPDATE subscriptions SET expires_at=0 WHERE user_id=$1 AND sub_type=$2",
-                    user_id, sub_type
+                    "UPDATE subscriptions SET expires_at=0, revoked_at=$3 WHERE user_id=$1 AND sub_type=$2",
+                    user_id, sub_type, now
                 )
     else:
         import aiosqlite
         async with aiosqlite.connect(SQLITE_PATH) as db:
             if sub_type is None:
                 await db.execute(
-                    "UPDATE subscriptions SET expires_at=0 WHERE user_id=?",
-                    (user_id,)
+                    "UPDATE subscriptions SET expires_at=0, revoked_at=? WHERE user_id=?",
+                    (now, user_id)
                 )
             else:
                 await db.execute(
-                    "UPDATE subscriptions SET expires_at=0 WHERE user_id=? AND sub_type=?",
-                    (user_id, sub_type)
+                    "UPDATE subscriptions SET expires_at=0, revoked_at=? WHERE user_id=? AND sub_type=?",
+                    (now, user_id, sub_type)
                 )
             await db.commit()
 # ---------- ADMIN QUERIES ----------
@@ -626,10 +628,10 @@ async def get_expired_subscriptions_page(limit: int = 10, offset: int = 0):
                 now,
             )
             rows = await conn.fetch(
-                "SELECT user_id, expires_at, sub_type "
+                "SELECT user_id, expires_at, sub_type, revoked_at "
                 "FROM subscriptions "
                 "WHERE expires_at <= $1 "
-                "ORDER BY expires_at DESC "
+                "ORDER BY revoked_at DESC, expires_at DESC "
                 "LIMIT $2 OFFSET $3",
                 now, limit, offset,
             )
@@ -638,6 +640,7 @@ async def get_expired_subscriptions_page(limit: int = 10, offset: int = 0):
                     "user_id": int(r["user_id"]),
                     "expires_at": int(r["expires_at"]),
                     "sub_type": r["sub_type"] or "",
+                    "revoked_at": int(r["revoked_at"] or 0),
                 }
                 for r in rows
             ]
@@ -652,10 +655,10 @@ async def get_expired_subscriptions_page(limit: int = 10, offset: int = 0):
             total = (await cur.fetchone())[0]
 
             cur = await db.execute(
-                "SELECT user_id, expires_at, sub_type "
+                "SELECT user_id, expires_at, sub_type, revoked_at "
                 "FROM subscriptions "
                 "WHERE expires_at <= ? "
-                "ORDER BY expires_at DESC "
+                "ORDER BY revoked_at DESC, expires_at DESC "
                 "LIMIT ? OFFSET ?",
                 (now, limit, offset),
             )
@@ -665,6 +668,7 @@ async def get_expired_subscriptions_page(limit: int = 10, offset: int = 0):
                     "user_id": int(r[0]),
                     "expires_at": int(r[1]),
                     "sub_type": r[2] or "",
+                    "revoked_at": int(r[3] or 0),
                 }
                 for r in rows
             ]

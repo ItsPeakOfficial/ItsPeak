@@ -123,7 +123,7 @@ async def go_home_clean(c):
     await delete_last_screen(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     # pošalji novi home screen
-    text = "🏠 Main menu\n\n📞 If you need any help, feel free to contact me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
+    text = "🏠 Main menu\n\n📞 If you need any help, feel free to contac me at @ispodradara106\n\n⬇️ Choose the service you need down below:"
 
     user_id = c.from_user.id
     kb = main_menu_kb_admin() if is_admin(user_id) else main_menu_kb()
@@ -301,10 +301,13 @@ async def start(m: Message):
     # 3) pošalji main menu kao jedini screen
     text = (
         "🏠 Main menu\n\n"
-        "📞 If you need any help, feel free to contact me at @ispodradara106\n\n"
+        "📞 If you need any help, feel free to contac me at @ispodradara106\n\n"
         "⬇️ Choose the service you need down below:"
     )
-    msg = await m.answer(text, reply_markup=main_menu_kb())
+    user_id = m.from_user.id
+    kb = main_menu_kb_admin() if is_admin(user_id) else main_menu_kb()
+
+    msg = await m.answer(text, reply_markup=kb)
 
     # 4) zapamti da je to zadnji screen
     LAST_SCREEN[m.from_user.id] = msg.message_id

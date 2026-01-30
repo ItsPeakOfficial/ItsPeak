@@ -836,11 +836,11 @@ async def get_private_lines_purchases_page(limit: int = 10, offset: int = 0):
             } for r in rows]
             return out, total
     
-    async def mark_payment_processed_once(payment_id: str) -> bool:
-        """
-        Vrati True samo prvi put kad vidimo payment_id.
-        Ako isti webhook dođe opet (retry / confirmed->finished), vrati False.
-        """
+async def mark_payment_processed_once(payment_id: str) -> bool:
+    """
+    Vrati True samo prvi put kad vidimo payment_id.
+    Ako isti webhook dođe opet (retry / confirmed->finished), vrati False.
+    """
     if not payment_id:
         return False
 

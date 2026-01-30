@@ -574,7 +574,7 @@ async def pay_nowpayments(c):
         f"⏱ **Selected plan:** {days} days\n\n"
         "*Please complete payment in the next 20 minutes!*\n\n"
         "If something happens, message me at @ispodradara106.\n\n"
-        "✅ Access will be activated automatically after confirmation.",
+        "✅ Access will be activated automatically after confirmation, if you paid you can go back to main menu, a bot message will let you know when you get access.",
         reply_markup=status_back_kb(),
         parse_mode="Markdown"
     )

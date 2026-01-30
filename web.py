@@ -241,7 +241,7 @@ async def nowpayments_webhook(request: Request):
             f"📦 Subscription: <b>{cat_key}</b>\n"
             f"🗓️ Plan: <b>{days} days</b>\n"
             "🔓 Access is now enabled.\n\n"
-            "Tap below to return to the menu:",
+            "Tap below to return to the menu and see access button:",
             reply_markup=back_to_menu_kb()
         )
 
@@ -268,7 +268,7 @@ async def nowpayments_webhook(request: Request):
                 "✅ <b>Payment confirmed!</b>\n\n"
                 f"🔐 Private lines package: <b>{package}</b>\n"
                 f"📦 Lines: <b>{lines_map[package]}</b>\n"
-                "📩 You will receive delivery / instructions soon.\n\n"
+                "📩 Message @ispodradara106 to receive lines manually.\n\n"
                 "Tap below to return to the menu:",
                 reply_markup=back_to_menu_kb()
             )

@@ -86,7 +86,7 @@ async def access(token: str, cat: str):
     if not drive_link:
         raise HTTPException(status_code=400, detail="Unknown category")
 
-    token_exp = int(data["expires_at"])  # token expiry (10 min)
+    token_exp = int(data["expires_at"])
 
     html = f"""
     <!DOCTYPE html>
@@ -109,9 +109,9 @@ async def access(token: str, cat: str):
 
             .card {{
                 background: #ffffff;
-                border-radius: 18px;
-                padding: 32px 36px;
-                max-width: 540px;
+                border-radius: 20px;
+                padding: 36px 40px;
+                max-width: 560px;
                 width: calc(100% - 32px);
                 box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
                 text-align: center;
@@ -125,7 +125,7 @@ async def access(token: str, cat: str):
                 color: #3730a3;
                 font-size: 14px;
                 font-weight: 700;
-                margin-bottom: 16px;
+                margin-bottom: 18px;
             }}
 
             h2 {{
@@ -133,42 +133,17 @@ async def access(token: str, cat: str):
                 color: #111827;
             }}
 
-            .sub {{
-                color: #374151;
-                font-size: 15px;
-                margin: 0 0 10px 0;
-            }}
-
-            .countdown {{
-                margin: 14px auto 22px;
-                display: inline-block;
-                padding: 10px 14px;
-                border-radius: 12px;
-                background: #f3f4f6;
-                color: #111827;
-                font-size: 14px;
-                font-weight: 700;
-            }}
-
-            .countdown small {{
-                display: block;
-                margin-top: 2px;
-                font-weight: 600;
-                color: #6b7280;
-                font-size: 12px;
-            }}
-
             .button {{
                 display: inline-block;
-                padding: 16px 34px;
+                padding: 16px 36px;
                 background: linear-gradient(135deg, #1a73e8, #0b5ed7);
                 color: #ffffff;
                 text-decoration: none;
                 border-radius: 999px;
                 font-size: 17px;
                 font-weight: 800;
-                transition: transform 0.15s ease, box-shadow 0.15s ease;
                 box-shadow: 0 10px 25px rgba(26, 115, 232, 0.45);
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
             }}
 
             .button:hover {{
@@ -176,11 +151,32 @@ async def access(token: str, cat: str):
                 box-shadow: 0 14px 32px rgba(26, 115, 232, 0.6);
             }}
 
-            .muted {{
-                margin-top: 20px;
-                font-size: 13px;
+            .timers {{
+                margin-top: 18px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                align-items: center;
+            }}
+
+            .pill {{
+                padding: 10px 16px;
+                border-radius: 14px;
+                background: #f3f4f6;
+                color: #111827;
+                font-size: 14px;
+                font-weight: 750;
+                display: inline-block;
+                min-width: 260px;
+                text-align: center;
+            }}
+
+            .pill small {{
+                display: block;
+                margin-top: 4px;
+                font-size: 12px;
                 color: #6b7280;
-                line-height: 1.35;
+                font-weight: 600;
             }}
 
             .expired {{
@@ -193,6 +189,12 @@ async def access(token: str, cat: str):
                 font-weight: 800;
                 display: none;
             }}
+
+            .footer {{
+                margin-top: 26px;
+                font-size: 13px;
+                color: #6b7280;
+            }}
         </style>
     </head>
     <body>
@@ -201,56 +203,85 @@ async def access(token: str, cat: str):
 
             <h2>✅ Access granted</h2>
 
-            <p class="sub">
-                Subscription active until:<br>
-                <b>{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(sub_exp))}</b>
-            </p>
-
-            <div class="countdown">
-                ⏳ Link expires in: <span id="timer">--:--</span>
-                <small>This is a temporary access link.</small>
-            </div>
-
             <a href="{drive_link}" target="_blank" class="button" id="openBtn">
                 🔗 Open Cloud
             </a>
+
+            <div class="timers">
+                <div class="pill">
+                    ⏳ Link expires in <span id="tokenTimer">--:--</span>
+                    <small>Temporary link (token expiry)</small>
+                </div>
+
+                <div class="pill">
+                    🧾 Subscription expires in <span id="subTimer">--</span>
+                    <small>Countdown until your subscription ends</small>
+                </div>
+            </div>
 
             <div class="expired" id="expiredBox">
                 ⚠️ This access link has expired. Please generate a new one from the bot.
             </div>
 
-            <div class="muted">
+            <div class="footer">
                 Secure access · Temporary link · Do not share
             </div>
         </div>
 
         <script>
-            // Countdown to token expiry (server provides UNIX timestamp)
-            const tokenExp = {token_exp} * 1000;
-            const timerEl = document.getElementById("timer");
-            const expiredBox = document.getElementById("expiredBox");
-            const openBtn = document.getElementById("openBtn");
+            const tokenExpMs = {int(token_exp)} * 1000;
+            const subExpMs   = {int(sub_exp)} * 1000;
+
+            const tokenTimerEl = document.getElementById("tokenTimer");
+            const subTimerEl   = document.getElementById("subTimer");
+            const expiredBox   = document.getElementById("expiredBox");
+            const openBtn      = document.getElementById("openBtn");
 
             function pad(n) {{
                 return String(n).padStart(2, "0");
             }}
 
+            function formatDHMS(totalSeconds) {{
+                // returns "Xd Yh Zm" (or "Ym Zs" if short)
+                let s = Math.max(0, totalSeconds);
+
+                const days = Math.floor(s / 86400);
+                s %= 86400;
+                const hours = Math.floor(s / 3600);
+                s %= 3600;
+                const mins = Math.floor(s / 60);
+                const secs = s % 60;
+
+                if (days > 0) return `${{days}}d ${{hours}}h ${{mins}}m`;
+                if (hours > 0) return `${{hours}}h ${{mins}}m ${{secs}}s`;
+                if (mins > 0) return `${{mins}}m ${{secs}}s`;
+                return `${{secs}}s`;
+            }}
+
             function tick() {{
                 const now = Date.now();
-                let diff = Math.floor((tokenExp - now) / 1000);
 
-                if (diff <= 0) {{
-                    timerEl.textContent = "00:00";
+                // --- TOKEN countdown (mm:ss) ---
+                let tokenDiff = Math.floor((tokenExpMs - now) / 1000);
+                if (tokenDiff <= 0) {{
+                    tokenTimerEl.textContent = "00:00";
                     expiredBox.style.display = "block";
                     openBtn.style.pointerEvents = "none";
                     openBtn.style.opacity = "0.5";
                     openBtn.textContent = "🔒 Link Expired";
-                    return;
+                }} else {{
+                    const m = Math.floor(tokenDiff / 60);
+                    const s = tokenDiff % 60;
+                    tokenTimerEl.textContent = `${{pad(m)}}:${{pad(s)}}`;
                 }}
 
-                const m = Math.floor(diff / 60);
-                const s = diff % 60;
-                timerEl.textContent = `${{pad(m)}}:${{pad(s)}}`;
+                // --- SUBSCRIPTION countdown (d/h/m/s) ---
+                let subDiff = Math.floor((subExpMs - now) / 1000);
+                if (subDiff <= 0) {{
+                    subTimerEl.textContent = "Expired";
+                }} else {{
+                    subTimerEl.textContent = formatDHMS(subDiff);
+                }}
             }}
 
             tick();

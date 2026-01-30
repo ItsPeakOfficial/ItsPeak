@@ -17,7 +17,7 @@ app = FastAPI()
 DRIVE_LINKS = {
     "mail_combo": "https://drive.google.com/drive/folders/XXXXX_MAIL",
     "url_cloud": "https://drive.google.com/drive/folders/XXXXX_URL",
-    "injectables": "https://drive.google.com/drive/folders/XXXXX_INJECT",
+    "injectables": "https://mega.nz/folder/no4CDKzC#ulHfTi9G3khXSmndbVT6qA",
 }
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY")

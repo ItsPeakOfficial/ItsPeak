@@ -158,6 +158,11 @@ async def build_main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
 
     return kb
 
+def close_cloud_info_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Close cloud info", callback_data="nav:home")]
+    ])
+
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -509,16 +514,24 @@ async def access_callback(c):
     exp = await db.get_subscription_expires_at(user_id, sub_type=cat_key)
 
     if exp <= now:
-        await c.message.answer("❌ Nemaš aktivan pristup. Klikni “Kupi 30 dana”.")
+        await c.message.answer(
+            "❌ Nemaš aktivan pristup. Klikni “Kupi 30 dana”."
+        )
         await c.answer()
         return
 
+    # generiraj privremeni token (10 min)
     token = await db.create_token(user_id, ttl_seconds=600)
     link = f"{BASE_URL}/access?token={token}&cat={cat_key}"
+
+    # ✅ pošalji cloud info + gumb za zatvaranje
     await c.message.answer(
         f"✅ Pristup odobren za: {CATEGORIES[cat_key]['title']}\n\n"
-        f"Privremeni link (10 min):\n{link}"
+        f"Privremeni link (10 min):\n{link}",
+        reply_markup=close_cloud_info_kb(),
+        disable_web_page_preview=True
     )
+
     await c.answer()
 
 @dp.callback_query(F.data.startswith("buy:"))

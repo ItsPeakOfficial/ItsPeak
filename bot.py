@@ -12,20 +12,20 @@ load_dotenv()
 
 CATEGORIES = {
     "mail_combo": {
-        "title": "📩 Cloud",
-        "desc": "🗓️ opis",
+        "title": "📩 Mail Combo Cloud",
+        "desc": "🗓️ Get daily UHQ lines - Hotmail/Gmail/Outlook etc..\n\nIf you need any help - @ispodradara106.",
     },
     "private_lines": {
-        "title": "🔐 Priv",
-        "desc": "📃 opius",
+        "title": "🔐 1:1 Full Private Untouched Lines",
+        "desc": "📃 Get fully untouched fresh lines that nobody got.\n\nIf you need any help - @ispodradara106.",
     },
     "url_cloud": {
-        "title": "🔗 URL",
-        "desc": "🎯 opis",
+        "title": "🔗 URL Dumping Lines Cloud",
+        "desc": "🎯 Get UHQ URLs ready for exploiting data, made with custom dorks.\n\nIf you need any help - @ispodradara106.",
     },
     "injectables": {
-        "title": "🧪 Inekcijje",
-        "desc": "💎 opis",
+        "title": "🧪 Injections / SQLI Ready Lines Cloud",
+        "desc": "💎 Get injectables/URLs checked working, and ready for dumping right away.\n\nIf you need any help - @ispodradara106.",
     },
 }
 PRIVATE_LINE_PACKAGES = {
@@ -138,10 +138,10 @@ async def go_home_clean(c):
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📩 Mejlovi Cloud 📩", callback_data="cat:mail_combo")],
-        [InlineKeyboardButton(text="🔐 FPV 🔐", callback_data="cat:private_lines")],
-        [InlineKeyboardButton(text="🔗 URL 🔗", callback_data="cat:url_cloud")],
-        [InlineKeyboardButton(text="🧪 Inekcije 🧪", callback_data="cat:injectables")],
+        [InlineKeyboardButton(text="📩 Combo Mail Cloud 📩", callback_data="cat:mail_combo")],
+        [InlineKeyboardButton(text="🔐 1:1 Full Private Lines 🔐", callback_data="cat:private_lines")],
+        [InlineKeyboardButton(text="🔗 Private URL Lines 🔗", callback_data="cat:url_cloud")],
+        [InlineKeyboardButton(text="🧪 Valid Injectable Lines🧪", callback_data="cat:injectables")],
         [InlineKeyboardButton(text="⭐ My subscription", callback_data="me:sub")],
     ])
 
@@ -346,8 +346,8 @@ async def plan_selected(c):
     await delete_last_notice(chat_id=c.message.chat.id, user_id=c.from_user.id)
 
     text2 = (
-        f"|🔴 REC | You selected <b>{days} DAYS</b> for {category_title(cat_key)}.\n\n"
-        "If you wish to buy with another crypto coin, feel free to message me at @ispodradara106.\n\n"
+        f"|🟣 REC | You selected <b>{days} DAYS</b> for {category_title(cat_key)}.\n\n"
+        "❗ If you wish to buy with another crypto coin, feel free to message me at @ispodradara106.\n\n"
         "Choose crypto to pay:"
     )
     await send_screen(

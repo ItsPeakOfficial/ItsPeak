@@ -40,6 +40,13 @@ async def init_db():
             
             """)
 
+            await conn.execute("""
+            CREATE TABLE IF NOT EXISTS processed_payments (
+                payment_id TEXT PRIMARY KEY,
+                processed_at BIGINT NOT NULL
+            );
+            """)
+
             # --- add revoked_at (optional) ---
             await conn.execute("""
             ALTER TABLE subscriptions
@@ -129,6 +136,13 @@ async def init_db():
                 price_usd INTEGER NOT NULL,
                 created_at INTEGER NOT NULL
             )
+            """)
+
+            await db.execute("""
+            CREATE TABLE IF NOT EXISTS processed_payments (
+                payment_id TEXT PRIMARY KEY,
+                processed_at INTEGER NOT NULL
+            );
             """)
 
             await db.execute("""
@@ -821,3 +835,35 @@ async def get_private_lines_purchases_page(limit: int = 10, offset: int = 0):
                 "created_at": int(r[4]),
             } for r in rows]
             return out, total
+    
+    async def mark_payment_processed_once(payment_id: str) -> bool:
+        """
+        Vrati True samo prvi put kad vidimo payment_id.
+        Ako isti webhook dođe opet (retry / confirmed->finished), vrati False.
+        """
+    if not payment_id:
+        return False
+
+    now_ts = int(time.time())
+
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            got = await conn.fetchval("""
+                INSERT INTO processed_payments (payment_id, processed_at)
+                VALUES ($1, $2)
+                ON CONFLICT (payment_id) DO NOTHING
+                RETURNING payment_id;
+            """, payment_id, now_ts)
+            return bool(got)
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            await db.execute(
+                "INSERT OR IGNORE INTO processed_payments (payment_id, processed_at) VALUES (?, ?);",
+                (payment_id, now_ts),
+            )
+            cur = await db.execute("SELECT changes();")
+            row = await cur.fetchone()
+            await db.commit()
+            return bool(row and row[0] == 1)

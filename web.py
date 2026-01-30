@@ -19,10 +19,12 @@ BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY")
 NOWPAYMENTS_IPN_SECRET = os.getenv("NOWPAYMENTS_IPN_SECRET")
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # isti token kao u bot.py
+BOT_USERNAME = os.getenv("BOT_USERNAME", "").lstrip("@")
 
-async def tg_send_message(chat_id: int, text: str):
+async def tg_send_message(chat_id: int, text: str, reply_markup: dict | None = None):
     """
     Pošalje Telegram poruku useru direktno preko Bot API.
+    reply_markup: dict (InlineKeyboardMarkup) ili None
     """
     if not BOT_TOKEN:
         print("BOT_TOKEN missing - cannot send Telegram message")
@@ -35,6 +37,8 @@ async def tg_send_message(chat_id: int, text: str):
         "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -44,6 +48,12 @@ async def tg_send_message(chat_id: int, text: str):
     except Exception as e:
         print("Telegram sendMessage exception:", repr(e))
 
+def back_to_menu_kb() -> dict:
+    return {
+        "inline_keyboard": [
+            [{"text": "🏠 Back to menu", "url": f"https://t.me/{BOT_USERNAME}?start=1"}]
+        ]
+    }
 
 @app.on_event("startup")
 async def on_startup():
@@ -173,9 +183,22 @@ async def nowpayments_webhook(request: Request):
     data = await request.json()
     status = (data.get("payment_status") or "").lower()
 
-    # NOWPayments obično šalje waiting/confirming/confirmed/finished...
-    if status not in {"confirmed", "finished"}:
-        return {"status": "ignored"}
+    # Obradi SAMO kad je finished (da ne dobiješ 2 poruke: confirmed + finished)
+    if status != "finished":
+        return {"status": "ignored_status", "payment_status": status}
+
+    # Idempotency: ako NOWPayments pošalje isti finished više puta (retry),
+    # mi odradimo samo prvi put.
+    payment_id = str(
+        data.get("payment_id")
+        or data.get("id")
+        or data.get("invoice_id")
+        or ""
+    )
+
+    ok_first_time = await db.mark_payment_processed_once(payment_id)
+    if not ok_first_time:
+        return {"status": "duplicate_ignored", "payment_id": payment_id}
 
     order_id = data.get("order_id", "")
 
@@ -211,13 +234,15 @@ async def nowpayments_webhook(request: Request):
             starts_at=now_ts,
         )
 
-        # ✅ notify user
+         # ✅ notify user
         await tg_send_message(
             user_id,
             "✅ <b>Payment confirmed!</b>\n\n"
             f"📦 Subscription: <b>{cat_key}</b>\n"
             f"🗓️ Plan: <b>{days} days</b>\n"
-            "🔁 You can now go back to the bot menu and use <b>Access</b>."
+            "🔓 Access is now enabled.\n\n"
+            "Tap below to return to the menu:",
+            reply_markup=back_to_menu_kb()
         )
 
         return {"status": "ok", "kind": "sub", "cat_key": cat_key, "days": days}
@@ -243,7 +268,9 @@ async def nowpayments_webhook(request: Request):
                 "✅ <b>Payment confirmed!</b>\n\n"
                 f"🔐 Private lines package: <b>{package}</b>\n"
                 f"📦 Lines: <b>{lines_map[package]}</b>\n"
-                "📩 You will receive delivery / instructions soon."
+                "📩 You will receive delivery / instructions soon.\n\n"
+                "Tap below to return to the menu:",
+                reply_markup=back_to_menu_kb()
             )
 
         return {"status": "ok", "kind": "pl", "package": package}

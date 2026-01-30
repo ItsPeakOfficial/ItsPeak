@@ -158,9 +158,10 @@ async def build_main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
 
     return kb
 
-def close_cloud_info_kb() -> InlineKeyboardMarkup:
+def cloud_info_kb(access_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Close cloud info", callback_data="nav:home")]
+        [InlineKeyboardButton(text="🔗 Link to cloud", url=access_url)],
+        [InlineKeyboardButton(text="❌ Close cloud info", callback_data="nav:home")],
     ])
 
 def main_menu_kb() -> InlineKeyboardMarkup:
@@ -527,8 +528,8 @@ async def access_callback(c):
     # ✅ pošalji cloud info + gumb za zatvaranje
     await c.message.answer(
         f"{CATEGORIES[cat_key]['title']}\n\n"
-        f"Get your link to cloud:\n{link}",
-        reply_markup=close_cloud_info_kb(),
+        "Tap the button below to open your cloud:",
+        reply_markup=cloud_info_kb(link),
         disable_web_page_preview=True
     )
 

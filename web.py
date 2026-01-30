@@ -81,22 +81,112 @@ async def access(token: str, cat: str):
 
     if sub_exp < now:
         raise HTTPException(status_code=403, detail="No active access")
+
     drive_link = DRIVE_LINKS.get(cat)
     if not drive_link:
         raise HTTPException(status_code=400, detail="Unknown category")
 
     html = f"""
-    <html>
-      <head><title>Cloud Access</title></head>
-      <body style="font-family: Arial; max-width: 700px; margin: 40px auto;">
-        <h2>✅ Pristup odobren</h2>
-        <p>Tvoj pristup vrijedi do: <b>{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(sub_exp))}</b></p>
-        <p><a href="{drive_link}" target="_blank">➡️ Otvori cloud (Google Drive)</a></p>
-        <hr />
-        <p style="color: #666;">Ova stranica provjerava token i pretplatu (SQLite).</p>
-      </body>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Cloud Access</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{
+                margin: 0;
+                padding: 0;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }}
+
+            .card {{
+                background: #ffffff;
+                border-radius: 18px;
+                padding: 32px 36px;
+                max-width: 520px;
+                width: 100%;
+                box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+                text-align: center;
+            }}
+
+            .badge {{
+                display: inline-block;
+                padding: 6px 14px;
+                border-radius: 999px;
+                background: #eef2ff;
+                color: #3730a3;
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: 16px;
+            }}
+
+            h2 {{
+                margin: 0 0 10px 0;
+                color: #111827;
+            }}
+
+            .expires {{
+                color: #374151;
+                font-size: 15px;
+                margin-bottom: 26px;
+            }}
+
+            .button {{
+                display: inline-block;
+                padding: 16px 34px;
+                background: linear-gradient(135deg, #1a73e8, #0b5ed7);
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 999px;
+                font-size: 17px;
+                font-weight: 700;
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
+                box-shadow: 0 10px 25px rgba(26, 115, 232, 0.45);
+            }}
+
+            .button:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 14px 32px rgba(26, 115, 232, 0.6);
+            }}
+
+            .footer {{
+                margin-top: 28px;
+                font-size: 13px;
+                color: #6b7280;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="badge">
+                🔐 {cat}
+            </div>
+
+            <h2>✅ Pristup odobren</h2>
+
+            <div class="expires">
+                Tvoj pristup vrijedi do:<br>
+                <b>{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(sub_exp))}</b>
+            </div>
+
+            <a href="{drive_link}" target="_blank" class="button">
+                🔗 Open Cloud
+            </a>
+
+            <div class="footer">
+                Secure access · Limited time link
+            </div>
+        </div>
+    </body>
     </html>
     """
+
     return HTMLResponse(html)
 
 @app.post("/pay/nowpayments/create")

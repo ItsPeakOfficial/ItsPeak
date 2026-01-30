@@ -100,8 +100,12 @@ async def access(token: str, cat: str):
                 margin: 0;
                 padding: 0;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+                background-image: url("https://i.postimg.cc/4dtHRnr1/Chat-GPT-Image-30-sij-2026-07-49-34.png");
                 min-height: 100vh;
+                background-size: cover;          /* full screen */
+                background-position: center;     /* centrirano */
+                background-repeat: no-repeat;    /* bez ponavljanja */
+                background-attachment: fixed;    /* lijep parallax efekt */
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -201,7 +205,7 @@ async def access(token: str, cat: str):
         <div class="card">
             <div class="badge">🔐 Category: {cat}</div>
 
-            <h2>✅ Access granted</h2>
+            <h2>Access to cloud granted</h2>
 
             <a href="{drive_link}" target="_blank" class="button" id="openBtn">
                 🔗 Open Cloud

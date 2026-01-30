@@ -24,9 +24,13 @@ async def init_db():
         async with pool.acquire() as conn:
             await conn.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (
-                user_id BIGINT PRIMARY KEY,
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                sub_type TEXT NOT NULL DEFAULT '',
                 expires_at BIGINT NOT NULL,
-                sub_type TEXT NOT NULL DEFAULT ''
+                plan_days BIGINT NOT NULL DEFAULT 0,
+                starts_at BIGINT NOT NULL DEFAULT 0,
+                UNIQUE (user_id, sub_type)
             );
             """)
             # ako ti je već kreirana stara tablica bez sub_type
@@ -79,10 +83,14 @@ async def init_db():
         async with aiosqlite.connect(SQLITE_PATH) as db:
             await db.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (
-                user_id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                sub_type TEXT NOT NULL DEFAULT '',
                 expires_at INTEGER NOT NULL,
-                sub_type TEXT NOT NULL DEFAULT ''
-            )
+                plan_days INTEGER NOT NULL DEFAULT 0,
+                starts_at INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(user_id, sub_type)
+            );
             """)
             # ako je već postojala stara tablica bez sub_type
             try:
@@ -129,9 +137,92 @@ async def init_db():
             )
             """)
 
-
+            await migrate_subscriptions_to_multi()
             await db.commit()
 
+async def migrate_subscriptions_to_multi():
+    """
+    Migrira staru subscriptions tablicu (user_id PRIMARY KEY)
+    u novu (id PK + UNIQUE(user_id, sub_type)).
+    Sigurno za SQLite i Postgres.
+    """
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            # ako već ima "id" kolonu, pretpostavi da je već migrirano
+            col = await conn.fetchval("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name='subscriptions' AND column_name='id'
+            """)
+            if col:
+                return
+
+            # rename old
+            await conn.execute("ALTER TABLE subscriptions RENAME TO subscriptions_old;")
+
+            # new table
+            await conn.execute("""
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                sub_type TEXT NOT NULL DEFAULT '',
+                expires_at BIGINT NOT NULL,
+                plan_days BIGINT NOT NULL DEFAULT 0,
+                starts_at BIGINT NOT NULL DEFAULT 0,
+                UNIQUE (user_id, sub_type)
+            );
+            """)
+
+            # copy
+            await conn.execute("""
+            INSERT INTO subscriptions (user_id, sub_type, expires_at, plan_days, starts_at)
+            SELECT
+                user_id,
+                COALESCE(sub_type,'') as sub_type,
+                expires_at,
+                COALESCE(plan_days,0) as plan_days,
+                COALESCE(starts_at,0) as starts_at
+            FROM subscriptions_old;
+            """)
+
+            await conn.execute("DROP TABLE subscriptions_old;")
+
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            cur = await db.execute("PRAGMA table_info(subscriptions)")
+            cols = [r[1] for r in await cur.fetchall()]
+            if "id" in cols:
+                return
+
+            await db.execute("ALTER TABLE subscriptions RENAME TO subscriptions_old;")
+
+            await db.execute("""
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                sub_type TEXT NOT NULL DEFAULT '',
+                expires_at INTEGER NOT NULL,
+                plan_days INTEGER NOT NULL DEFAULT 0,
+                starts_at INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(user_id, sub_type)
+            )
+            """)
+
+            await db.execute("""
+            INSERT INTO subscriptions (user_id, sub_type, expires_at, plan_days, starts_at)
+            SELECT
+                user_id,
+                COALESCE(sub_type,''),
+                expires_at,
+                COALESCE(plan_days,0),
+                COALESCE(starts_at,0)
+            FROM subscriptions_old;
+            """)
+
+            await db.execute("DROP TABLE subscriptions_old;")
+            await db.commit()
 
 # ---------- SUBSCRIPTIONS ----------
 async def set_subscription(
@@ -148,10 +239,9 @@ async def set_subscription(
             await conn.execute("""
             INSERT INTO subscriptions (user_id, expires_at, sub_type, plan_days, starts_at)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (user_id)
+            ON CONFLICT (user_id, sub_type)
             DO UPDATE SET
                 expires_at = EXCLUDED.expires_at,
-                sub_type = EXCLUDED.sub_type,
                 plan_days = EXCLUDED.plan_days,
                 starts_at = EXCLUDED.starts_at
             """, user_id, expires_at, sub_type or "", int(plan_days or 0), int(starts_at or 0))
@@ -160,28 +250,42 @@ async def set_subscription(
         async with aiosqlite.connect(SQLITE_PATH) as db:
             await db.execute(
                 "INSERT INTO subscriptions (user_id, expires_at, sub_type, plan_days, starts_at) VALUES (?, ?, ?, ?, ?) "
-                "ON CONFLICT(user_id) DO UPDATE SET "
-                "expires_at=excluded.expires_at, sub_type=excluded.sub_type, plan_days=excluded.plan_days, starts_at=excluded.starts_at",
+                "ON CONFLICT(user_id, sub_type) DO UPDATE SET "
+                "expires_at=excluded.expires_at, plan_days=excluded.plan_days, starts_at=excluded.starts_at",
                 (user_id, expires_at, sub_type or "", int(plan_days or 0), int(starts_at or 0)),
             )
             await db.commit()
 
 
-async def get_subscription_expires_at(user_id: int) -> int:
+async def get_subscription_expires_at(user_id: int, sub_type: str | None = None) -> int:
     if DATABASE_URL:
         pool = await _pg()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT expires_at FROM subscriptions WHERE user_id=$1",
+            if sub_type:
+                row = await conn.fetchrow(
+                    "SELECT expires_at FROM subscriptions WHERE user_id=$1 AND sub_type=$2",
+                    user_id, sub_type
+                )
+                return int(row["expires_at"]) if row else 0
+            # fallback: max expiry (korisno za /status)
+            val = await conn.fetchval(
+                "SELECT COALESCE(MAX(expires_at),0) FROM subscriptions WHERE user_id=$1",
                 user_id
             )
-            return int(row["expires_at"]) if row else 0
+            return int(val or 0)
     else:
         import aiosqlite
         async with aiosqlite.connect(SQLITE_PATH) as db:
+            if sub_type:
+                cur = await db.execute(
+                    "SELECT expires_at FROM subscriptions WHERE user_id=? AND sub_type=?",
+                    (user_id, sub_type),
+                )
+                row = await cur.fetchone()
+                return int(row[0]) if row else 0
             cur = await db.execute(
-                "SELECT expires_at FROM subscriptions WHERE user_id=?",
-                (user_id,)
+                "SELECT COALESCE(MAX(expires_at),0) FROM subscriptions WHERE user_id=?",
+                (user_id,),
             )
             row = await cur.fetchone()
             return int(row[0]) if row else 0
@@ -247,6 +351,57 @@ async def create_token(user_id: int, ttl_seconds: int = 600) -> str:
 
     return token
 
+async def get_user_subscriptions(user_id: int, active_only: bool = True):
+    now = int(time.time())
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            if active_only:
+                rows = await conn.fetch(
+                    "SELECT user_id, expires_at, sub_type, plan_days, starts_at "
+                    "FROM subscriptions WHERE user_id=$1 AND expires_at > $2 "
+                    "ORDER BY expires_at DESC",
+                    user_id, now,
+                )
+            else:
+                rows = await conn.fetch(
+                    "SELECT user_id, expires_at, sub_type, plan_days, starts_at "
+                    "FROM subscriptions WHERE user_id=$1 "
+                    "ORDER BY expires_at DESC",
+                    user_id,
+                )
+            return [{
+                "user_id": int(r["user_id"]),
+                "expires_at": int(r["expires_at"]),
+                "sub_type": r["sub_type"] or "",
+                "plan_days": int(r["plan_days"] or 0),
+                "starts_at": int(r["starts_at"] or 0),
+            } for r in rows]
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            if active_only:
+                cur = await db.execute(
+                    "SELECT user_id, expires_at, sub_type, plan_days, starts_at "
+                    "FROM subscriptions WHERE user_id=? AND expires_at > ? "
+                    "ORDER BY expires_at DESC",
+                    (user_id, now),
+                )
+            else:
+                cur = await db.execute(
+                    "SELECT user_id, expires_at, sub_type, plan_days, starts_at "
+                    "FROM subscriptions WHERE user_id=? "
+                    "ORDER BY expires_at DESC",
+                    (user_id,),
+                )
+            rows = await cur.fetchall()
+            return [{
+                "user_id": int(r[0]),
+                "expires_at": int(r[1]),
+                "sub_type": r[2] or "",
+                "plan_days": int(r[3] or 0),
+                "starts_at": int(r[4] or 0),
+            } for r in rows]
 
 async def get_token(token: str):
     if DATABASE_URL:
@@ -308,6 +463,22 @@ async def cleanup_expired_tokens():
             )
             await db.commit()
 
+async def revoke_subscription(user_id: int, sub_type: str | None = None):
+    if DATABASE_URL:
+        pool = await _pg()
+        async with pool.acquire() as conn:
+            if sub_type is None:
+                await conn.execute("DELETE FROM subscriptions WHERE user_id=$1", user_id)
+            else:
+                await conn.execute("DELETE FROM subscriptions WHERE user_id=$1 AND sub_type=$2", user_id, sub_type)
+    else:
+        import aiosqlite
+        async with aiosqlite.connect(SQLITE_PATH) as db:
+            if sub_type is None:
+                await db.execute("DELETE FROM subscriptions WHERE user_id=?", (user_id,))
+            else:
+                await db.execute("DELETE FROM subscriptions WHERE user_id=? AND sub_type=?", (user_id, sub_type))
+            await db.commit()
 # ---------- ADMIN QUERIES ----------
 async def get_subscriptions_page(limit: int = 10, offset: int = 0):
     """

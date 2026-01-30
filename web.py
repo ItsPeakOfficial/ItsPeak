@@ -26,7 +26,7 @@ async def on_startup():
 
 
 @app.get("/access")
-async def access(token: str):
+async def access(token: str, cat: str):
     now = int(time.time())
 
     data = await db.get_token(token)
@@ -38,7 +38,7 @@ async def access(token: str):
         raise HTTPException(status_code=403, detail="Token expired")
 
     user_id = data["user_id"]
-    sub_exp = await db.get_subscription_expires_at(user_id)
+    sub_exp = await db.get_subscription_expires_at(user_id, sub_type=cat)
 
     if sub_exp < now:
         raise HTTPException(status_code=403, detail="No active access")

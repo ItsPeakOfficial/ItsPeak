@@ -309,10 +309,10 @@ async def nav_home(c):
 @dp.callback_query(F.data == "me:sub")
 async def my_subscription(c):
     user_id = c.from_user.id
-    info = await db.get_subscription_info(user_id)
-
+    subs = await db.get_user_subscriptions(user_id, active_only=True)
     now = int(time.time())
-    if not info or info["expires_at"] <= now:
+
+    if not subs:
         text = (
             "⭐ <b>My subscription</b>\n\n"
             "❌ You don't have an active subscription.\n\n"
@@ -322,18 +322,19 @@ async def my_subscription(c):
         await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
         return await c.answer()
 
-    exp = info["expires_at"]
-    st = sub_type_label(info.get("sub_type", ""))
+    lines = ["⭐ <b>My subscription</b>\n"]
+    for s in subs:
+        exp = int(s["expires_at"])
+        st = sub_type_label(s.get("sub_type", ""))
+        plan_days = int(s.get("plan_days") or 0)
+        lines.append(
+            f"✅ <b>{st}</b>\n"
+            f"🧾 Plan: <b>{plan_days} days</b>\n"
+            f"⏳ Expires: <code>{fmt_ts(exp)}</code>\n"
+            f"🕒 Remaining: <b>{fmt_remaining(exp)}</b>"
+        )
 
-    plan_days = int(info.get("plan_days") or 0)
-
-    text = (
-        "⭐ <b>My subscription</b>\n\n"
-        f"📦 Type: <b>{st}</b>\n"
-        f"🧾 Plan: <b>{plan_days} days</b>\n"
-        f"⏳ Expires: <code>{fmt_ts(exp)}</code>\n"
-        f"🕒 Remaining: <b>{fmt_remaining(exp)}</b>\n"
-    )
+    text = "\n\n".join(lines)
     kb = status_back_kb()
     await safe_edit_or_replace(c, text, kb, parse_mode="HTML")
     await c.answer()
@@ -411,7 +412,7 @@ async def access_callback(c):
 
     user_id = c.from_user.id
     now = int(time.time())
-    exp = await db.get_subscription_expires_at(user_id)
+    exp = await db.get_subscription_expires_at(user_id, sub_type=cat_key)
 
     if exp <= now:
         await c.message.answer("❌ Nemaš aktivan pristup. Klikni “Kupi 30 dana”.")
@@ -419,7 +420,7 @@ async def access_callback(c):
         return
 
     token = await db.create_token(user_id, ttl_seconds=600)
-    link = f"{BASE_URL}/access?token={token}"
+    link = f"{BASE_URL}/access?token={token}&cat={cat_key}"
     await c.message.answer(
         f"✅ Pristup odobren za: {CATEGORIES[cat_key]['title']}\n\n"
         f"Privremeni link (10 min):\n{link}"
@@ -609,7 +610,12 @@ def admin_grant_user_kb(uid: int, back_page: int) -> InlineKeyboardMarkup:
          InlineKeyboardButton(text="🧪 Injections — 30d", callback_data=f"admin:grantdo:{uid}:injectables:30:{back_page}"),
          InlineKeyboardButton(text="🧪 Injections — 90d", callback_data=f"admin:grantdo:{uid}:injectables:90:{back_page}")],
 
-        [InlineKeyboardButton(text="🗑️ UNGRANT (revoke)", callback_data=f"admin:ungrant:{uid}:{back_page}")],
+        [
+        InlineKeyboardButton(text="🗑️ Revoke Cloud", callback_data=f"admin:ungrant:{uid}:mail_combo:{back_page}"),
+        InlineKeyboardButton(text="🗑️ Revoke URL", callback_data=f"admin:ungrant:{uid}:url_cloud:{back_page}"),
+        InlineKeyboardButton(text="🗑️ Revoke Inject", callback_data=f"admin:ungrant:{uid}:injectables:{back_page}"),
+        ],
+        [InlineKeyboardButton(text="🧨 Revoke ALL", callback_data=f"admin:ungrant:{uid}:ALL:{back_page}")],
 
         [InlineKeyboardButton(text="⬅️ Back to users", callback_data=f"admin:grant:{back_page}"),
          InlineKeyboardButton(text="🏠 Home", callback_data="nav:home")],
@@ -822,19 +828,22 @@ async def admin_grant_user_screen(c):
     back_page = max(1, int(back_page_str))
 
     user_label = await format_user_identity(uid)
-    info = await db.get_subscription_info(uid)
+    subs = await db.get_user_subscriptions(uid, active_only=True)
     now = int(time.time())
 
-    if not info or info["expires_at"] <= now:
+    if not subs:
         sub_line = "❌ <b>No active subscription</b>"
     else:
-        sub_line = (
-            f"✅ <b>Active</b>\n"
-            f"📦 Type: <b>{sub_type_label(info.get('sub_type',''))}</b>\n"
-            f"🧾 Plan: <b>{int(info.get('plan_days') or 0)} days</b>\n"
-            f"⏳ Expires: <code>{fmt_ts(int(info['expires_at']))}</code>\n"
-            f"🕒 Remaining: <b>{fmt_remaining(int(info['expires_at']))}</b>"
-        )
+        parts = ["✅ <b>Active subscriptions</b>"]
+        for s in subs:
+            exp = int(s["expires_at"])
+            st = sub_type_label(s.get("sub_type", ""))
+            pd = int(s.get("plan_days") or 0)
+            parts.append(
+                f"• <b>{st}</b> — <b>{pd} days</b>\n"
+                f"  ⏳ <code>{fmt_ts(exp)}</code> — <b>{fmt_remaining(exp)}</b>"
+            )
+        sub_line = "\n".join(parts)
 
     text = (
         "🎁 <b>Grant access</b>\n\n"

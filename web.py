@@ -92,7 +92,7 @@ async def create_nowpayments_invoice(
     cat_key: Optional[str] = None,
 ):
     # cijene
-    price_map_days = {10: 15, 30: 30, 90: 60}
+    price_map_days = {10: 2, 30: 30, 90: 60}
     price_map_private = {"1k": 10, "5k": 30, "10k": 50, "30k": 100}
 
     allowed = {"btc", "ltc", "eth", "usdttrc20"}
